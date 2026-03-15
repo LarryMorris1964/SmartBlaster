@@ -1,0 +1,6 @@
+Reference,Quantity,Description,Manufacturer,Part Number,Supplier,Supplier PN,Unit Price,Notes
+RPi,1,Raspberry Pi 4 Model B 4GB,Raspberry Pi Foundation,SC0194,Adafruit,3775,,
+Camera,1,Raspberry Pi Camera Module v2,Raspberry Pi Foundation,SC0023,Adafruit,3099,,
+IR_TX,2,IR LED 940nm 5mm,Vishay,TSAL6400,DigiKey,751-1203-ND,,
+IR_RX,1,IR Receiver 38kHz,Vishay,TSOP38238,DigiKey,751-1227-ND,,
+PSU,1,5V 3A USB-C Power Supply,,,,,Replace with specific supplier
