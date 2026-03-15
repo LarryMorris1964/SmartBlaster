@@ -29,3 +29,4 @@ Print each `.obj` file from `hardware/enclosure/revA/`. See the [enclosure READM
 ### 5. Close enclosure
 - Align `smartblaster_front` with `smartblaster_back`
 - Snap or screw closed (hardware TBD)
+

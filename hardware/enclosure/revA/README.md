@@ -1,8 +1,9 @@
-# Enclosure — Rev A
+# SmartBlaster Enclosure — Rev A
 
-First revision of the SmartBlaster 3D-printed enclosure.
+This is the first working enclosure for the SmartBlaster HVAC controller.
 
-## Parts
+## Included Parts
+
 
 | File | Description |
 |------|-------------|
@@ -11,6 +12,7 @@ First revision of the SmartBlaster 3D-printed enclosure.
 | `camera_bracket.obj` | Camera module mounting bracket |
 | `ir_mount.obj` | IR sensor/emitter mount |
 | `pi_standoffs.obj` | Raspberry Pi PCB standoff posts |
+| `blink_mount.obj` | Raspberry Pi PCB standoff posts |
 
 ## Print Settings (recommended)
 
@@ -21,3 +23,13 @@ First revision of the SmartBlaster 3D-printed enclosure.
 
 ## Assembly
 See [docs/assembly_guide.md](../../../../docs/assembly_guide.md) for step-by-step instructions.
+
+## Notes
+
+- Designed for landscape camera orientation
+- Flush-mounted lens behind a chamfered window
+- IR LED positioned at +25 mm X offset
+- Pi standoffs sized for Raspberry Pi Zero 2 W (adjustable)
+- Backplate includes Blink-style 1/4-20 mount boss
+
+See `/docs/enclosure_printing.md` for print settings.

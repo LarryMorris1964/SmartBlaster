@@ -1,0 +1,24 @@
+from smartblaster.config import RuntimeConfig
+
+
+def test_default_runtime_config() -> None:
+    cfg = RuntimeConfig()
+    assert cfg.ir_tx_gpio == 4
+    assert cfg.ir_rx_gpio == 17
+    assert cfg.loop_interval_ms == 500
+    assert cfg.daily_on_time == "10:00"
+    assert cfg.daily_off_time == "16:00"
+    assert cfg.active_days_csv == "mon,tue,wed,thu,fri,sat,sun"
+    assert cfg.timezone == "UTC"
+    assert cfg.target_temperature_c == 24.0
+    assert cfg.fan_mode == "auto"
+    assert cfg.swing_mode == "off"
+    assert cfg.preset_mode == "none"
+    assert cfg.camera_enabled is False
+    assert cfg.thermostat_profile_id == "midea_kjr_12b_dp_t"
+    assert cfg.thermostat_temperature_unit == "C"
+    assert cfg.inverter_source_enabled is False
+    assert cfg.inverter_source_type == "none"
+    assert cfg.inverter_surplus_start_w == 0
+    assert cfg.inverter_surplus_stop_w == 0
+    assert cfg.config_schema_version == 1

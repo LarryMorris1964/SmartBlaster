@@ -1,14 +1,10 @@
-"""SmartBlaster main entry point."""
+"""Backward-compatible script entrypoint.
 
-import time
+Prefer running `python -m smartblaster` from the software directory.
+"""
 
-
-def main() -> None:
-    print("SmartBlaster starting...")
-    # TODO: initialize hardware interfaces and start main loop
-    while True:
-        time.sleep(1)
+from smartblaster.main import main
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

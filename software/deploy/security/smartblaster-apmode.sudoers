@@ -1,0 +1,5 @@
+# Allow SmartBlaster service user to run only AP mode scripts without password.
+# Install as /etc/sudoers.d/smartblaster-apmode (mode 0440).
+
+pi ALL=(root) NOPASSWD: /opt/smartblaster/software/deploy/ap/start_ap_mode.sh
+pi ALL=(root) NOPASSWD: /opt/smartblaster/software/deploy/ap/stop_ap_mode.sh

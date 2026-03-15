@@ -19,3 +19,12 @@
 
 ## References
 - [Official datasheet](https://www.raspberrypi.com/documentation/accessories/camera.html)
+
+
+# Camera Module Dimensions
+
+- PCB: 32 × 32 mm
+- PCB depth: 14 mm
+- Lens diameter: 27 mm
+- Lens length (front glass → PCB front): 45 mm
+- Required clearance behind PCB: 14 mm

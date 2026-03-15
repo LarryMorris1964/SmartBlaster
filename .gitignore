@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+
+# CAD
+*.3mf
+*.step
+*.stp
+*.f3d
+*.fcstd
+
+# Generated meshes
+*.stl
+*.obj
+
+# OS junk
+.DS_Store
+Thumbs.db

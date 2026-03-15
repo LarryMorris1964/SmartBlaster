@@ -1,3 +1,8 @@
 # Core dependencies — add versions as the project stabilises
 RPi.GPIO
 picamera2
+# Runtime dependencies
+pyserial>=3.5
+fastapi>=0.115.0
+uvicorn>=0.30.0
+pydantic>=2.8.0

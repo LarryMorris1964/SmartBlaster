@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smartblaster"
+version = "0.1.0"
+description = "SmartBlaster control software for Raspberry Pi"
+requires-python = ">=3.9"
+dependencies = [
+  "RPi.GPIO",
+  "picamera2",
+  "pyserial>=3.5",
+  "fastapi>=0.115.0",
+  "uvicorn>=0.30.0",
+  "pydantic>=2.8.0"
+]
+
+[project.scripts]
+smartblaster-cli = "smartblaster.cli:main"
+smartblaster-setup-server = "smartblaster.provisioning.web:main"
+smartblaster-device = "smartblaster.bootstrap:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

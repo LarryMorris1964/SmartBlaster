@@ -29,5 +29,152 @@ python src/main.py
 ## Test
 
 ```bash
-pytest tests/
+pytest
+```
+
+## New Scaffolded Modules
+
+- `src/smartblaster/config.py` — runtime settings from environment variables
+- `src/smartblaster/hardware/` — camera + IR adapters
+- `src/smartblaster/control/state_machine.py` — HVAC control state skeleton
+- `src/smartblaster/services/runtime.py` — runtime wiring and loop
+
+Run with:
+
+```bash
+python -m smartblaster
+```
+
+## CLI (ESP32 IR Bridge)
+
+Send commands to the ESP32 bridge over serial:
+
+```bash
+smartblaster-cli --serial-port COM3 set --mode cool --temp 24 --fan medium --swing vertical
+smartblaster-cli --serial-port COM3 off
+```
+
+## Runtime Event Dispatch
+
+The runtime loop now maps high-level events to typed Midea commands:
+
+- `cool_requested` -> COOL command
+- `heat_requested` -> HEAT command
+- `dry_requested` -> DRY command
+- `fan_requested` -> FAN_ONLY command
+- `stop_requested` -> OFF command
+
+When state changes, runtime emits a `midea_ir.command` frame via `IrService.send_midea_command()`.
+
+## Daily Automation (Initial Solar Approximation)
+
+Configure fixed daily on/off events via environment variables:
+
+- `SMARTBLASTER_DAILY_ON_TIME` (HH:MM, local time)
+- `SMARTBLASTER_DAILY_OFF_TIME` (HH:MM, local time)
+- `SMARTBLASTER_TARGET_TEMPERATURE_C`
+
+Current behavior:
+- At `DAILY_ON_TIME`, SmartBlaster emits `cool_requested` and sends a COOL command at the target temperature.
+- At `DAILY_OFF_TIME`, SmartBlaster emits `stop_requested` and sends OFF.
+
+Future behavior:
+- External stimuli (e.g., inverter/solar surplus signals) can inject events through `EventSource` implementations without replacing runtime/state-machine logic.
+
+## Camera Optional Operation
+
+SmartBlaster supports IR-only operation (no camera attached):
+
+- Set `SMARTBLASTER_CAMERA_ENABLED=false`
+- Runtime uses a no-op camera service and still executes all IR scheduling/dispatch
+
+This enables a Sensibo-style launch mode where the device blasts IR commands without visual verification.
+
+## Thermostat Profile Selection
+
+Set `SMARTBLASTER_THERMOSTAT_PROFILE_ID` to select a supported profile from the thermostat library.
+
+Current launch profile:
+- `midea_kjr_12b_dp_t`
+
+Profile metadata lives in `src/smartblaster/thermostats/library.py`.
+
+## Captive Portal Provisioning Scaffold
+
+Provisioning core logic is implemented in `src/smartblaster/provisioning/service.py`.
+It validates setup payloads (Wi-Fi credentials, thermostat profile, camera mode) and persists setup state.
+
+A future local web server/captive portal can call this module directly.
+
+A local setup server scaffold is now available:
+
+```bash
+smartblaster-setup-server --host 0.0.0.0 --port 8080
+```
+
+Endpoints:
+- `GET /` setup page (basic HTML)
+- `GET /api/thermostats` profile options from library
+- `POST /api/setup` validate and persist onboarding settings
+
+## Device Bootstrap Mode
+
+Use one command to choose setup vs runtime automatically:
+
+```bash
+smartblaster-device --mode auto --state-file data/device_setup.json
+```
+
+Startup behavior:
+- If setup state file is missing: run captive setup server mode.
+- If setup state file exists: run HVAC runtime mode.
+
+Override manually:
+- `--mode setup`
+- `--mode run`
+
+Enable AP-mode script orchestration during setup mode:
+
+```bash
+smartblaster-device --mode setup --enable-ap-mode \
+	--ap-use-sudo \
+	--ap-start-script ./deploy/ap/start_ap_mode.sh \
+	--ap-stop-script ./deploy/ap/stop_ap_mode.sh
+```
+
+For production service users, add a restricted sudoers rule so only AP scripts are permitted:
+- [software/deploy/security/smartblaster-apmode.sudoers](deploy/security/smartblaster-apmode.sudoers)
+
+Use real Wi-Fi verification with NetworkManager in setup server mode:
+
+```bash
+smartblaster-setup-server --use-nmcli
+```
+
+## Service Installation Helpers (Linux/Raspberry Pi)
+
+From `/opt/smartblaster/software`:
+
+```bash
+./deploy/install/preflight_check.sh
+```
+
+```bash
+./deploy/install/post_install_check.sh
+```
+
+```bash
+sudo ./deploy/install/install_service.sh
+```
+
+Optional (skip checks):
+
+```bash
+sudo ./deploy/install/install_service.sh --skip-preflight --skip-post-check
+```
+
+To uninstall service artifacts:
+
+```bash
+sudo ./deploy/install/uninstall_service.sh
 ```
