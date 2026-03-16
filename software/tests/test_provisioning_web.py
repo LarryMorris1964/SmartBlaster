@@ -152,6 +152,9 @@ def test_setup_page_mentions_camera_setup() -> None:
 
     assert response.status_code == 200
     assert "Camera Setup" in response.text
+    assert "Run Camera Setup Now" in response.text
+    assert "Check Readability (Advanced)" in response.text
+    assert "Copy Diagnostics" in response.text
     assert "Save Reference Image" in response.text
     assert "Device Name" in response.text
     assert "Software Version" in response.text
@@ -172,7 +175,26 @@ def test_device_info_endpoint_uses_saved_name(tmp_path: Path) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["device_name"] == "Bedroom SmartBlaster"
+    assert payload["has_camera_setup_values"] is False
     assert "software_version" in payload
+
+
+def test_device_info_reports_existing_camera_setup_values(tmp_path: Path) -> None:
+    state_file = tmp_path / "device_setup.json"
+    state_file.write_text(
+        '{"device_name": "Bedroom SmartBlaster", "camera_enabled": true, "reference_image_dir": "data/reference_images"}',
+        encoding="utf-8",
+    )
+
+    app = create_provisioning_app(ProvisioningService(state_file=state_file))
+    client = TestClient(app)
+
+    response = client.get("/api/device-info")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["has_camera_setup_values"] is True
+    assert payload["camera_enabled"] is True
 
 
 def test_portal_docs_endpoints_return_text() -> None:
