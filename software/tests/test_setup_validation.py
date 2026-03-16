@@ -7,6 +7,7 @@ from pathlib import Path
 from smartblaster.hardware.ir import IrService
 from smartblaster.services.setup_validation import (
     SetupValidator,
+    _VALIDATION_SEQUENCE,
     ValidationReport,
     ValidationStepOutcome,
 )
@@ -70,7 +71,7 @@ def _success(mode: DisplayMode, power_on: bool = True) -> StatusAttemptResult:
     )
 
 
-_STEP_COUNT = 5  # cool, heat, dry, fan_only, off
+_STEP_COUNT = len(_VALIDATION_SEQUENCE)
 
 
 # ---------------------------------------------------------------------------
@@ -125,13 +126,23 @@ def test_no_camera_report_includes_profile_id() -> None:
 
 
 def _all_passing_results() -> list[StatusAttemptResult]:
-    return [
-        _success(DisplayMode.COOL),
-        _success(DisplayMode.HEAT),
-        _success(DisplayMode.DRY),
-        _success(DisplayMode.FAN_ONLY),
-        _success(DisplayMode.OFF, power_on=False),
-    ]
+    results: list[StatusAttemptResult] = []
+    for spec in _VALIDATION_SEQUENCE:
+        if spec.command.mode == DisplayMode.OFF.value:
+            results.append(_success(DisplayMode.OFF, power_on=False))
+        else:
+            parsed_temp = spec.expected_set_temperature_c
+            if parsed_temp is None:
+                parsed_temp = spec.command.temperature_c
+            state = ThermostatDisplayState(
+                model_id="midea_kjr_12b_dp_t",
+                power_on=True,
+                mode=DisplayMode(spec.command.mode.value),
+                set_temperature=parsed_temp,
+                fan_speed=FanSpeedLevel.AUTO,
+            )
+            results.append(StatusAttemptResult(outcome=StatusAttemptOutcome.SUCCESS, state=state))
+    return results
 
 
 def test_all_pass_overall_pass_is_true() -> None:
@@ -149,7 +160,9 @@ def test_all_pass_sends_five_commands() -> None:
     ir = FakeIr()
     service = FakeStatusService(_all_passing_results())
     _make_validator(ir, service).run()
-    assert ir.sent == ["cool", "heat", "dry", "fan_only", "off"]
+    assert len(ir.sent) == _STEP_COUNT
+    assert ir.sent[0] == "cool"
+    assert ir.sent[-1] == "off"
 
 
 def test_all_pass_step_command_names() -> None:
@@ -157,7 +170,7 @@ def test_all_pass_step_command_names() -> None:
     service = FakeStatusService(_all_passing_results())
     report = _make_validator(ir, service).run()
     names = [s.command_name for s in report.steps]
-    assert names == ["cool", "heat", "dry", "fan_only", "off"]
+    assert names == [spec.command_name for spec in _VALIDATION_SEQUENCE]
 
 
 def test_all_pass_parsed_mode_recorded() -> None:
@@ -167,6 +180,9 @@ def test_all_pass_parsed_mode_recorded() -> None:
     cool_step = report.steps[0]
     assert cool_step.parsed_mode == "cool"
     assert cool_step.parsed_power_on is True
+    assert cool_step.parsed_set_temperature_c == 26
+    assert cool_step.command_payload["mode"] == "cool"
+    assert cool_step.command_payload["temperature_c"] == 26
 
 
 # ---------------------------------------------------------------------------
@@ -177,10 +193,8 @@ def test_all_pass_parsed_mode_recorded() -> None:
 def test_wrong_mode_outcome_is_fail() -> None:
     """Thermostat acks COOL command but reports HEAT mode."""
     ir = FakeIr()
-    results = [
-        _success(DisplayMode.HEAT),  # cool command → wrong mode returned
-        *_all_passing_results()[1:],
-    ]
+    results = _all_passing_results()
+    results[0] = _success(DisplayMode.HEAT)  # cool_26 command -> wrong mode returned
     service = FakeStatusService(results)
     report = _make_validator(ir, service).run()
 
@@ -191,12 +205,28 @@ def test_wrong_mode_outcome_is_fail() -> None:
     assert all(s.outcome == ValidationStepOutcome.PASS for s in report.steps[1:])
 
 
+def test_optional_heat_failure_does_not_fail_overall() -> None:
+    """Optional steps should not fail the overall validation."""
+    ir = FakeIr()
+    results = _all_passing_results()
+    heat_index = next(i for i, spec in enumerate(_VALIDATION_SEQUENCE) if spec.command_name == "heat")
+    results[heat_index] = _success(DisplayMode.COOL)
+    service = FakeStatusService(results)
+    report = _make_validator(ir, service).run()
+
+    heat_step = report.steps[heat_index]
+    assert heat_step.command_name == "heat"
+    assert heat_step.required_for_pass is False
+    assert heat_step.outcome == ValidationStepOutcome.FAIL
+    assert report.optional_step_failures == 1
+    assert report.required_step_failures == 0
+    assert report.overall_pass is True
+
+
 def test_parse_failed_outcome_is_fail() -> None:
     ir = FakeIr()
-    results = [
-        StatusAttemptResult(outcome=StatusAttemptOutcome.PARSE_FAILED, error_message="no parse"),
-        *_all_passing_results()[1:],
-    ]
+    results = _all_passing_results()
+    results[0] = StatusAttemptResult(outcome=StatusAttemptOutcome.PARSE_FAILED, error_message="no parse")
     service = FakeStatusService(results)
     report = _make_validator(ir, service).run()
 
@@ -207,18 +237,28 @@ def test_parse_failed_outcome_is_fail() -> None:
 
 def test_camera_unavailable_outcome_is_camera_error() -> None:
     ir = FakeIr()
-    results = [
-        StatusAttemptResult(
-            outcome=StatusAttemptOutcome.CAMERA_UNAVAILABLE,
-            error_message="camera did not return a frame",
-        ),
-        *_all_passing_results()[1:],
-    ]
+    results = _all_passing_results()
+    results[0] = StatusAttemptResult(
+        outcome=StatusAttemptOutcome.CAMERA_UNAVAILABLE,
+        error_message="camera did not return a frame",
+    )
     service = FakeStatusService(results)
     report = _make_validator(ir, service).run()
 
     assert report.overall_pass is False
     assert report.steps[0].outcome == ValidationStepOutcome.CAMERA_ERROR
+
+
+def test_required_failure_counts_mark_overall_fail() -> None:
+    ir = FakeIr()
+    results = _all_passing_results()
+    cool_index = next(i for i, spec in enumerate(_VALIDATION_SEQUENCE) if spec.command_name == "cool_26")
+    results[cool_index] = _success(DisplayMode.HEAT)
+    service = FakeStatusService(results)
+    report = _make_validator(ir, service).run()
+
+    assert report.required_step_failures == 1
+    assert report.overall_pass is False
 
 
 # ---------------------------------------------------------------------------
@@ -228,28 +268,34 @@ def test_camera_unavailable_outcome_is_camera_error() -> None:
 
 def test_off_passes_when_power_on_is_false() -> None:
     ir = FakeIr()
-    results = [*_all_passing_results()[:4], _success(DisplayMode.UNKNOWN, power_on=False)]
+    results = _all_passing_results()
+    off_index = next(i for i, spec in enumerate(_VALIDATION_SEQUENCE) if spec.command_name == "off")
+    results[off_index] = _success(DisplayMode.UNKNOWN, power_on=False)
     service = FakeStatusService(results)
     report = _make_validator(ir, service).run()
-    off_step = report.steps[4]
+    off_step = report.steps[off_index]
     assert off_step.outcome == ValidationStepOutcome.PASS
 
 
 def test_off_passes_when_mode_is_off_regardless_of_power_on() -> None:
     ir = FakeIr()
-    results = [*_all_passing_results()[:4], _success(DisplayMode.OFF, power_on=True)]
+    results = _all_passing_results()
+    off_index = next(i for i, spec in enumerate(_VALIDATION_SEQUENCE) if spec.command_name == "off")
+    results[off_index] = _success(DisplayMode.OFF, power_on=True)
     service = FakeStatusService(results)
     report = _make_validator(ir, service).run()
-    off_step = report.steps[4]
+    off_step = report.steps[off_index]
     assert off_step.outcome == ValidationStepOutcome.PASS
 
 
 def test_off_fails_when_power_on_true_and_mode_not_off() -> None:
     ir = FakeIr()
-    results = [*_all_passing_results()[:4], _success(DisplayMode.COOL, power_on=True)]
+    results = _all_passing_results()
+    off_index = next(i for i, spec in enumerate(_VALIDATION_SEQUENCE) if spec.command_name == "off")
+    results[off_index] = _success(DisplayMode.COOL, power_on=True)
     service = FakeStatusService(results)
     report = _make_validator(ir, service).run()
-    off_step = report.steps[4]
+    off_step = report.steps[off_index]
     assert off_step.outcome == ValidationStepOutcome.FAIL
 
 
@@ -289,3 +335,32 @@ def test_sleep_fn_called_once_per_step() -> None:
     validator.run()
     assert len(sleep_calls) == _STEP_COUNT
     assert all(s == 7.5 for s in sleep_calls)
+
+
+def test_sequence_exercises_extended_ir_variants() -> None:
+    names = {spec.command_name for spec in _VALIDATION_SEQUENCE}
+    assert "cool_26" in names
+    assert "cool_24" in names
+    assert "auto" in names
+    assert "fan_turbo" in names
+    assert "swing_both" in names
+    assert "preset_sleep" in names
+    assert "follow_me" in names
+    assert "beeper" in names
+
+
+def test_required_temperature_mismatch_fails_overall() -> None:
+    results = _all_passing_results()
+    cool24_index = next(i for i, spec in enumerate(_VALIDATION_SEQUENCE) if spec.command_name == "cool_24")
+    bad_state = ThermostatDisplayState(
+        model_id="midea_kjr_12b_dp_t",
+        power_on=True,
+        mode=DisplayMode.COOL,
+        set_temperature=26.0,
+        fan_speed=FanSpeedLevel.AUTO,
+    )
+    results[cool24_index] = StatusAttemptResult(outcome=StatusAttemptOutcome.SUCCESS, state=bad_state)
+
+    report = _make_validator(FakeIr(), FakeStatusService(results)).run()
+    assert report.overall_pass is False
+    assert report.steps[cool24_index].outcome == ValidationStepOutcome.FAIL

@@ -20,8 +20,9 @@ class SetupRequest:
     camera_enabled: bool
     device_name: str = "SmartBlaster"
     daily_on_time: str = "10:00"
-    daily_off_time: str = "16:00"
-    target_temperature_c: float = 24.0
+    daily_off_time: str = "15:00"
+    solar_weekly_schedule: dict[str, dict[str, str]] | None = None
+    target_temperature_c: float = 26.0
     timezone: str = "UTC"
     active_days: list[str] | None = None
     fan_mode: str = "auto"
@@ -99,6 +100,8 @@ class ProvisioningService:
         if not _is_valid_hhmm(request.daily_off_time):
             raise ValueError("daily_off_time must be HH:MM (24-hour)")
 
+        _validate_weekly_schedule(request.solar_weekly_schedule)
+
         if not (16.0 <= request.target_temperature_c <= 30.0):
             raise ValueError("target_temperature_c must be between 16 and 30")
 
@@ -162,6 +165,7 @@ class ProvisioningService:
             "camera_enabled": request.camera_enabled,
             "daily_on_time": request.daily_on_time,
             "daily_off_time": request.daily_off_time,
+            "solar_weekly_schedule": _normalize_weekly_schedule(request.solar_weekly_schedule),
             "target_temperature_c": request.target_temperature_c,
             "timezone": request.timezone,
             "active_days": _normalize_active_days(request.active_days),
@@ -210,3 +214,35 @@ def _validate_active_days(active_days: list[str]) -> None:
     invalid = [item for item in normalized if item not in valid_days]
     if invalid:
         raise ValueError(f"active_days has invalid values: {', '.join(invalid)}")
+
+
+def _normalize_weekly_schedule(schedule: dict[str, dict[str, str]] | None) -> dict[str, dict[str, str]]:
+    if not schedule:
+        return {}
+    normalized: dict[str, dict[str, str]] = {}
+    for day, entry in schedule.items():
+        normalized[str(day).strip().lower()] = {
+            "on_time": str(entry.get("on_time", "")).strip(),
+            "off_time": str(entry.get("off_time", "")).strip(),
+        }
+    return normalized
+
+
+def _validate_weekly_schedule(schedule: dict[str, dict[str, str]] | None) -> None:
+    if not schedule:
+        return
+
+    valid_days = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+    for raw_day, raw_entry in schedule.items():
+        day = str(raw_day).strip().lower()
+        if day not in valid_days:
+            raise ValueError(f"solar_weekly_schedule has invalid day: {raw_day}")
+        if not isinstance(raw_entry, dict):
+            raise ValueError(f"solar_weekly_schedule.{day} must be an object")
+
+        on_time = str(raw_entry.get("on_time", "")).strip()
+        off_time = str(raw_entry.get("off_time", "")).strip()
+        if not _is_valid_hhmm(on_time):
+            raise ValueError(f"solar_weekly_schedule.{day}.on_time must be HH:MM")
+        if not _is_valid_hhmm(off_time):
+            raise ValueError(f"solar_weekly_schedule.{day}.off_time must be HH:MM")

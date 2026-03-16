@@ -1,4 +1,4 @@
-from smartblaster.config import RuntimeConfig
+from smartblaster.config import RuntimeConfig, from_env
 
 
 def test_default_runtime_config() -> None:
@@ -8,10 +8,11 @@ def test_default_runtime_config() -> None:
     assert cfg.ir_rx_gpio == 17
     assert cfg.loop_interval_ms == 500
     assert cfg.daily_on_time == "10:00"
-    assert cfg.daily_off_time == "16:00"
+    assert cfg.daily_off_time == "15:00"
     assert cfg.active_days_csv == "mon,tue,wed,thu,fri,sat,sun"
+    assert cfg.solar_weekly_schedule == {}
     assert cfg.timezone == "UTC"
-    assert cfg.target_temperature_c == 24.0
+    assert cfg.target_temperature_c == 26.0
     assert cfg.fan_mode == "auto"
     assert cfg.swing_mode == "off"
     assert cfg.preset_mode == "none"
@@ -34,3 +35,15 @@ def test_default_runtime_config() -> None:
     assert cfg.reference_offload_interval_minutes == 15
     assert cfg.reference_offload_batch_size == 25
     assert cfg.config_schema_version == 1
+
+
+def test_from_env_parses_weekly_schedule(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "SMARTBLASTER_SOLAR_WEEKLY_SCHEDULE_JSON",
+        '{"mon":{"on_time":"09:30","off_time":"15:10"},"sun":{"on":"10:00","off":"14:00"}}',
+    )
+    cfg = from_env()
+    assert cfg.solar_weekly_schedule["mon"]["on_time"] == "09:30"
+    assert cfg.solar_weekly_schedule["mon"]["off_time"] == "15:10"
+    assert cfg.solar_weekly_schedule["sun"]["on_time"] == "10:00"
+    assert cfg.solar_weekly_schedule["sun"]["off_time"] == "14:00"

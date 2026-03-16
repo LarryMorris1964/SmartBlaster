@@ -127,10 +127,26 @@ Configure fixed daily on/off events via environment variables:
 - `SMARTBLASTER_DAILY_ON_TIME` (HH:MM, local time)
 - `SMARTBLASTER_DAILY_OFF_TIME` (HH:MM, local time)
 - `SMARTBLASTER_TARGET_TEMPERATURE_C`
+- `SMARTBLASTER_SOLAR_WEEKLY_SCHEDULE_JSON` (optional per-day override JSON)
+
+Default schedule is 10:00 ON and 15:00 OFF.
+Default target setpoint is 26C (about 78.8F).
+
+Example weekly schedule JSON:
+
+```json
+{
+	"mon": {"on_time": "09:45", "off_time": "15:30"},
+	"tue": {"on_time": "10:00", "off_time": "15:00"}
+}
+```
 
 Current behavior:
 - At `DAILY_ON_TIME`, SmartBlaster emits `cool_requested` and sends a COOL command at the target temperature.
 - At `DAILY_OFF_TIME`, SmartBlaster emits `stop_requested` and sends OFF.
+- Temperature control is sent as an explicit target setpoint in the IR payload (for example 24C), not as temp-up/temp-down button increments.
+- Midea IR payload setpoints are encoded in Celsius (`temperature_c`), even when thermostat UI settings may be Fahrenheit-facing.
+- Runtime treats thermostat timer state as informational; direct runtime ON/OFF commands are intended to supersede manual timer settings.
 
 Future behavior:
 - External stimuli (e.g., inverter/solar surplus signals) can inject events through `EventSource` implementations without replacing runtime/state-machine logic.

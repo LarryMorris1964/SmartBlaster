@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from smartblaster.events.sources import CompositeEventSource, DailyTimeEventSource, QueueEventSource
+from smartblaster.events.sources import CompositeEventSource, DailyTimeEventSource, QueueEventSource, WeeklyTimeEventSource
 
 
 def test_daily_time_event_source_fires_on_and_off_once_per_day() -> None:
@@ -53,3 +53,29 @@ def test_composite_event_source_returns_first_available_event() -> None:
 
     assert composite.poll() == "cool_requested"
     assert composite.poll() is None
+
+
+def test_weekly_time_event_source_uses_per_day_schedule() -> None:
+    src = WeeklyTimeEventSource(
+        schedule_by_day={
+            "mon": {"on_time": "09:30", "off_time": "14:45"},
+            "tue": {"on_time": "10:15", "off_time": "15:15"},
+        }
+    )
+
+    # Monday schedule.
+    assert src.poll(now=datetime(2026, 3, 16, 9, 29)) is None
+    assert src.poll(now=datetime(2026, 3, 16, 9, 30)) == "cool_requested"
+    assert src.poll(now=datetime(2026, 3, 16, 14, 45)) == "stop_requested"
+
+    # Tuesday schedule.
+    assert src.poll(now=datetime(2026, 3, 17, 10, 15)) == "cool_requested"
+    assert src.poll(now=datetime(2026, 3, 17, 15, 15)) == "stop_requested"
+
+
+def test_weekly_time_event_source_skips_unconfigured_day() -> None:
+    src = WeeklyTimeEventSource(
+        schedule_by_day={"mon": {"on_time": "10:00", "off_time": "15:00"}}
+    )
+    # Tuesday has no schedule entry.
+    assert src.poll(now=datetime(2026, 3, 17, 10, 0)) is None

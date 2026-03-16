@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ from smartblaster.provisioning.service import ProvisioningService
 from smartblaster.provisioning.state import load_setup_state, persist_setup_state
 from smartblaster.provisioning.system import network_connected_best_effort, request_reboot, reboot_commands_from_env
 from smartblaster.provisioning.web import create_provisioning_app
+from smartblaster.services.activity_log import ActivityLogger
 from smartblaster.services.runtime import RuntimeNetworkUnavailable, SmartBlasterRuntime
 
 
@@ -60,6 +62,10 @@ def _apply_setup_state_to_env(setup: dict[str, object]) -> None:
     daily_off_time = setup.get("daily_off_time")
     if isinstance(daily_off_time, str) and _is_valid_hhmm(daily_off_time):
         os.environ.setdefault("SMARTBLASTER_DAILY_OFF_TIME", daily_off_time)
+
+    weekly_schedule = setup.get("solar_weekly_schedule")
+    if isinstance(weekly_schedule, dict) and weekly_schedule:
+        os.environ.setdefault("SMARTBLASTER_SOLAR_WEEKLY_SCHEDULE_JSON", json.dumps(weekly_schedule))
 
     target_temperature_c = setup.get("target_temperature_c")
     if isinstance(target_temperature_c, (int, float)) and math.isfinite(float(target_temperature_c)):
@@ -238,7 +244,7 @@ def _run_runtime(state_file: Path) -> int:
     except RuntimeNetworkUnavailable as ex:
         setup["force_setup_on_next_boot"] = True
         persist_setup_state(state_file, setup)
-        print(f"runtime_network_failure={ex}")
+        ActivityLogger().network_failover(reason=str(ex))
         request_reboot()
         return 75
     return 0

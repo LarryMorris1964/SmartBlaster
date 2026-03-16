@@ -8,7 +8,7 @@ from pathlib import Path
 from smartblaster.config import from_env
 from smartblaster.services.activity_log import ActivityLogger, configure_logging
 from smartblaster.control.state_machine import HvacStateMachine
-from smartblaster.events.sources import CompositeEventSource, DailyTimeEventSource, EventSource
+from smartblaster.events.sources import CompositeEventSource, EventSource, WeeklyTimeEventSource
 from smartblaster.hardware.camera import CameraService, NoCameraService
 from smartblaster.hardware.ir import IrService
 from smartblaster.ir.command import MideaFan, MideaPreset, MideaSwing
@@ -83,10 +83,8 @@ class SmartBlasterRuntime:
 
         event_source = CompositeEventSource(
             sources=[
-                DailyTimeEventSource(
-                    on_time=cfg.daily_on_time,
-                    off_time=cfg.daily_off_time,
-                    active_days=tuple(_parse_active_days(cfg.active_days_csv)),
+                WeeklyTimeEventSource(
+                    schedule_by_day=_build_weekly_schedule(cfg),
                     timezone=cfg.timezone,
                 ),
             ]
@@ -231,6 +229,18 @@ def _parse_active_days(active_days_csv: str) -> list[str]:
     if not days:
         return ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
     return days
+
+
+def _build_weekly_schedule(cfg) -> dict[str, dict[str, str]]:
+    # If explicit per-day schedule exists, it is the source of truth.
+    if getattr(cfg, "solar_weekly_schedule", None):
+        return dict(cfg.solar_weekly_schedule)
+
+    # Backward-compatibility path from legacy daily on/off + active-days fields.
+    return {
+        day: {"on_time": cfg.daily_on_time, "off_time": cfg.daily_off_time}
+        for day in _parse_active_days(cfg.active_days_csv)
+    }
 
 
 def _command_name_for_event(event: str, mode: object) -> str:

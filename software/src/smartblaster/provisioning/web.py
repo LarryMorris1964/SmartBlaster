@@ -32,8 +32,9 @@ class SetupPayload(BaseModel):
     thermostat_profile_id: str
     camera_enabled: bool = False
     daily_on_time: str = Field(default="10:00", pattern=r"^\d{2}:\d{2}$")
-    daily_off_time: str = Field(default="16:00", pattern=r"^\d{2}:\d{2}$")
-    target_temperature_c: float = Field(default=24.0, ge=16.0, le=30.0)
+    daily_off_time: str = Field(default="15:00", pattern=r"^\d{2}:\d{2}$")
+    solar_weekly_schedule: dict[str, dict[str, str]] = Field(default_factory=dict)
+    target_temperature_c: float = Field(default=26.0, ge=16.0, le=30.0)
     timezone: str = Field(default="UTC", min_length=1)
     active_days: list[str] = Field(default_factory=lambda: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
     fan_mode: str = Field(default="auto")
@@ -200,6 +201,7 @@ def create_provisioning_app(
                     camera_enabled=payload.camera_enabled,
                     daily_on_time=payload.daily_on_time,
                     daily_off_time=payload.daily_off_time,
+                    solar_weekly_schedule=payload.solar_weekly_schedule,
                     target_temperature_c=payload.target_temperature_c,
                     timezone=payload.timezone,
                     active_days=payload.active_days,
@@ -339,10 +341,10 @@ def create_provisioning_app(
       <input id="dailyOn" value="10:00" />
 
       <label>Daily Cool Stop (HH:MM)</label>
-      <input id="dailyOff" value="16:00" />
+      <input id="dailyOff" value="15:00" />
 
       <label>Target Temperature (°C)</label>
-      <input id="targetTemp" type="number" min="16" max="30" step="0.5" value="24" />
+      <input id="targetTemp" type="number" min="16" max="30" step="0.5" value="26" />
 
       <label>Thermostat Temperature Unit</label>
       <select id="tempUnit">

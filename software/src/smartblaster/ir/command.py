@@ -1,4 +1,8 @@
-"""Typed command model for Midea KJR-12B-DP-T style IR control."""
+"""Typed command model for Midea KJR-12B-DP-T style IR control.
+
+SmartBlaster uses explicit setpoint commands (mode + temperature_c) rather than
+relative temp-up/temp-down button semantics in runtime control flows.
+"""
 
 from __future__ import annotations
 

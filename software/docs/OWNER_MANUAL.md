@@ -16,14 +16,14 @@ Use the captive portal page on first boot.
 2. Open the setup portal page.
 3. Enter a device name.
 4. Enter your home Wi-Fi SSID and password.
-5. Select your thermostat profile.
-6. Enable camera verification if installed.
+5. Select your thermostat profile from a list of supported thermostats.
+6. Enable camera command-verification if your device includes a camera.
 7. Save setup.
 
 If camera verification is enabled:
 1. Open Camera Setup in the portal.
-2. Align camera framing so the thermostat display is clearly visible.
-3. Check focus, glare, and parser confidence.
+2. Align camera framing so the thermostat display is clearly visible, and zoomed so that the thermostat fills the image.
+3. Check focus, glare.  Setup will show parser confidence values, indicating whether the images are succesfully processed.
 4. Save a reference image labeled installer-approved.
 
 ## 3. Setup Page Fields
@@ -46,6 +46,8 @@ Typical behavior:
 - Applies profile-supported commands for cooling, fan, and swing.
 - Uses policy metadata to classify command verification behavior.
 - Captures status snapshots and reference images when configured.
+- Uses explicit mode + set-temperature IR commands (absolute setpoint), not incremental temp up/down steps.
+- Treats thermostat timer state as non-authoritative; runtime ON/OFF commands override timer outcomes.
 
 ## 5. Troubleshooting
 - Wi-Fi setup fails:

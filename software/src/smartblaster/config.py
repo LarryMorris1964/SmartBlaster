@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import json
 import os
+import re
+
+_WEEKDAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
 @dataclass(frozen=True)
@@ -15,10 +19,11 @@ class RuntimeConfig:
     ir_rx_gpio: int = 17
     loop_interval_ms: int = 500
     daily_on_time: str = "10:00"
-    daily_off_time: str = "16:00"
+    daily_off_time: str = "15:00"
     active_days_csv: str = "mon,tue,wed,thu,fri,sat,sun"
+    solar_weekly_schedule: dict[str, dict[str, str]] = field(default_factory=dict)
     timezone: str = "UTC"
-    target_temperature_c: float = 24.0
+    target_temperature_c: float = 26.0
     fan_mode: str = "auto"
     swing_mode: str = "off"
     preset_mode: str = "none"
@@ -52,6 +57,45 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _is_valid_hhmm(value: str) -> bool:
+    if not re.match(r"^\d{2}:\d{2}$", value):
+        return False
+    hour, minute = value.split(":", maxsplit=1)
+    return 0 <= int(hour) <= 23 and 0 <= int(minute) <= 59
+
+
+def _parse_weekly_schedule(raw: str) -> dict[str, dict[str, str]]:
+    text = raw.strip()
+    if not text:
+        return {}
+
+    try:
+        data = json.loads(text)
+    except Exception as ex:
+        raise ValueError("SMARTBLASTER_SOLAR_WEEKLY_SCHEDULE_JSON must be valid JSON") from ex
+
+    if not isinstance(data, dict):
+        raise ValueError("SMARTBLASTER_SOLAR_WEEKLY_SCHEDULE_JSON must be an object")
+
+    schedule: dict[str, dict[str, str]] = {}
+    for key, value in data.items():
+        day = str(key).strip().lower()
+        if day not in _WEEKDAY_KEYS:
+            raise ValueError(f"invalid weekday in weekly schedule: {key}")
+        if not isinstance(value, dict):
+            raise ValueError(f"schedule entry for {day} must be an object")
+
+        on_time = str(value.get("on_time", value.get("on", ""))).strip()
+        off_time = str(value.get("off_time", value.get("off", ""))).strip()
+        if not _is_valid_hhmm(on_time):
+            raise ValueError(f"invalid on_time for {day}: {on_time}")
+        if not _is_valid_hhmm(off_time):
+            raise ValueError(f"invalid off_time for {day}: {off_time}")
+
+        schedule[day] = {"on_time": on_time, "off_time": off_time}
+    return schedule
+
+
 
 def from_env() -> RuntimeConfig:
     return RuntimeConfig(
@@ -62,10 +106,11 @@ def from_env() -> RuntimeConfig:
         ir_rx_gpio=int(os.getenv("SMARTBLASTER_IR_RX_GPIO", "17")),
         loop_interval_ms=int(os.getenv("SMARTBLASTER_LOOP_INTERVAL_MS", "500")),
         daily_on_time=os.getenv("SMARTBLASTER_DAILY_ON_TIME", "10:00"),
-        daily_off_time=os.getenv("SMARTBLASTER_DAILY_OFF_TIME", "16:00"),
+        daily_off_time=os.getenv("SMARTBLASTER_DAILY_OFF_TIME", "15:00"),
         active_days_csv=os.getenv("SMARTBLASTER_ACTIVE_DAYS", "mon,tue,wed,thu,fri,sat,sun"),
+        solar_weekly_schedule=_parse_weekly_schedule(os.getenv("SMARTBLASTER_SOLAR_WEEKLY_SCHEDULE_JSON", "")),
         timezone=os.getenv("SMARTBLASTER_TIMEZONE", "UTC"),
-        target_temperature_c=float(os.getenv("SMARTBLASTER_TARGET_TEMPERATURE_C", "24")),
+        target_temperature_c=float(os.getenv("SMARTBLASTER_TARGET_TEMPERATURE_C", "26")),
         fan_mode=os.getenv("SMARTBLASTER_FAN_MODE", "auto"),
         swing_mode=os.getenv("SMARTBLASTER_SWING_MODE", "off"),
         preset_mode=os.getenv("SMARTBLASTER_PRESET_MODE", "none"),
