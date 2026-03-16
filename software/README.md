@@ -234,6 +234,25 @@ The training-mode and capability-validation workflows are not fully automated ye
 
 ## Device Bootstrap Mode
 
+## Raspberry Pi OS Lite Deployment
+
+Pi OS Lite (64-bit) is sufficient for SmartBlaster.
+
+Deployment assets:
+- First-boot setup script: `deploy/install/first_boot_setup.sh`
+- Vision package install script (OpenCV, Tesseract, TFLite best-effort): `deploy/install/install_vision_stack.sh`
+- Service installer: `deploy/install/install_service.sh`
+- systemd unit: `deploy/systemd/smartblaster.service`
+- Full image prep checklist: `docs/PI_IMAGE_PREP_CHECKLIST.md`
+
+Typical bring-up flow on Pi:
+
+```bash
+cd ~/SmartBlaster/software
+sudo ./deploy/install/first_boot_setup.sh
+systemctl status smartblaster.service
+```
+
 Use one command to choose setup vs runtime automatically:
 
 ```bash
