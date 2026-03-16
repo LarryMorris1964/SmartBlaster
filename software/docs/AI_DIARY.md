@@ -33,4 +33,6 @@ The practical outcome is already meaningful. This is good enough to pack in a su
 
 Tomorrow's practical milestone is even better: thanks to overnight delivery, nearly all reference hardware should be in hand and ready for first deployment testing.
 
+Action items captured during this Day 1 checkpoint now live in `docs/PROJECT_BACKLOG.md` so planning can continue as a running project backlog instead of day-by-day TODO fragments.
+
 The point of this diary is not hype. It is to keep a factual record of how AI-assisted engineering moved from a homeowner problem, to a validated design concept, to hardware on order, to a fairly complete first software implementation in roughly a day.

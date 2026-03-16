@@ -36,6 +36,10 @@ pytest
 
 An AI-assisted build diary lives in `docs/AI_DIARY.md`.
 
+## Project Backlog
+
+A running project backlog lives in `docs/PROJECT_BACKLOG.md`.
+
 ## New Scaffolded Modules
 
 - `src/smartblaster/config.py` — runtime settings from environment variables
