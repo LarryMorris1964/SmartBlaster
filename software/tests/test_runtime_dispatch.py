@@ -1,7 +1,7 @@
 from smartblaster.hardware.camera import CameraService
 from smartblaster.ir.command import MideaMode
 from smartblaster.events.sources import QueueEventSource
-from smartblaster.services.runtime import SmartBlasterRuntime
+from smartblaster.services.runtime import SmartBlasterRuntime, _command_name_for_event
 from smartblaster.vision.models import DisplayMode, ThermostatDisplayState
 
 
@@ -83,3 +83,8 @@ def test_runtime_status_request_uses_status_service() -> None:
     status = runtime.request_thermostat_status()
     assert status.power_on is True
     assert status.mode == DisplayMode.COOL
+
+
+def test_command_name_mapping_for_policy_lookup() -> None:
+    assert _command_name_for_event("stop_requested", MideaMode.OFF) == "power_off"
+    assert _command_name_for_event("cool_requested", MideaMode.COOL) == "set_mode"

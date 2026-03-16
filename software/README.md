@@ -145,6 +145,13 @@ Current launch profile:
 
 Profile metadata lives in `src/smartblaster/thermostats/library.py`.
 
+Command execution policy is now profile-driven (criticality, retry count, retry wait), keyed by thermostat profile.
+This keeps command behavior extensible across brands/models while reusing the same runtime flow.
+At setup time, profile selection determines:
+- IR protocol implementation
+- camera support availability
+- command policy defaults used by runtime (for current logging and future verification/retry orchestration)
+
 ## Captive Portal Provisioning Scaffold
 
 Provisioning core logic is implemented in `src/smartblaster/provisioning/service.py`.
