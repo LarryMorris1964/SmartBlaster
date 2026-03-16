@@ -202,6 +202,14 @@ def create_provisioning_app(
         )
         return {"title": "Owner's Manual", "text": manual_text}
 
+    @app.get("/api/setup")
+    def get_setup() -> dict[str, object]:
+        if not provisioning.state_file.exists():
+            raise HTTPException(status_code=404, detail="No saved setup")
+        state = load_setup_state(provisioning.state_file)
+        internal_keys = {"setup_state_version", "saved_by_software_version", "config_schema_version"}
+        return {k: v for k, v in state.items() if k not in internal_keys}
+
     @app.post("/api/setup")
     def apply_setup(payload: SetupPayload) -> dict[str, object]:
         try:
@@ -796,6 +804,90 @@ def create_provisioning_app(
           sel.innerHTML = '<option value="midea_kjr_12b_dp_t" selected>Midea</option>';
         }
         updateCameraPanel();
+        await loadSavedSetup();
+      }
+
+      async function loadSavedSetup() {
+        try {
+          const res = await fetch('/api/setup');
+          if (!res.ok) return;
+          const s = await res.json();
+
+          // Plain text / number inputs
+          const textFields = {
+            ssid: s.wifi_ssid,
+            timezone: s.timezone,
+            targetTemp: s.target_temperature_c,
+            activeDays: Array.isArray(s.active_days) ? s.active_days.join(',') : s.active_days,
+            inverterSourceType: s.inverter_source_type,
+            inverterStartW: s.inverter_surplus_start_w,
+            inverterStopW: s.inverter_surplus_stop_w,
+            statusHistoryFile: s.status_history_file,
+            statusImageDir: s.status_image_dir,
+            referenceImageDir: s.reference_image_dir,
+            trainingCaptureIntervalMinutes: s.training_capture_interval_minutes,
+            referenceOffloadIntervalMinutes: s.reference_offload_interval_minutes,
+            referenceOffloadBatchSize: s.reference_offload_batch_size,
+          };
+          for (const [id, val] of Object.entries(textFields)) {
+            const el = document.getElementById(id);
+            if (el && val != null) el.value = val;
+          }
+
+          // Select elements
+          const selectFields = {
+            profile: s.thermostat_profile_id,
+            tempUnit: s.thermostat_temperature_unit,
+            fanMode: s.fan_mode,
+            swingMode: s.swing_mode,
+            presetMode: s.preset_mode,
+          };
+          for (const [id, val] of Object.entries(selectFields)) {
+            const el = document.getElementById(id);
+            if (el && val != null) el.value = val;
+          }
+
+          // Checkboxes
+          const checkboxes = [
+            ['inverterEnabled', s.inverter_source_enabled],
+            ['statusDiagnosticMode', s.status_diagnostic_mode],
+            ['referenceCaptureOnFailure', s.reference_capture_on_parse_failure],
+            ['trainingModeEnabled', s.training_mode_enabled],
+            ['referenceOffloadEnabled', s.reference_offload_enabled],
+          ];
+          for (const [id, val] of checkboxes) {
+            const el = document.getElementById(id);
+            if (el && val != null) el.checked = Boolean(val);
+          }
+          // camera_enabled is stored inverted on the disableCameraVerification checkbox
+          if (s.camera_enabled != null) {
+            document.getElementById('disableCameraVerification').checked = !s.camera_enabled;
+          }
+
+          // Daily schedule (Monday row drives all days until per-day details are opened)
+          if (s.daily_on_time) document.getElementById('sched_mon_on').value = s.daily_on_time;
+          if (s.daily_off_time) document.getElementById('sched_mon_off').value = s.daily_off_time;
+
+          // Per-day schedule overrides
+          const sched = s.solar_weekly_schedule || {};
+          for (const day of ['tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
+            const entry = sched[day];
+            if (entry) {
+              if (entry.on_time) document.getElementById(`sched_${day}_on`).value = entry.on_time;
+              if (entry.off_time) document.getElementById(`sched_${day}_off`).value = entry.off_time;
+            }
+          }
+
+          // device_name is also populated by loadDeviceInfo; set it here in case order differs
+          if (s.device_name) {
+            document.getElementById('deviceName').value = s.device_name;
+            document.getElementById('deviceNameDisplay').textContent = s.device_name;
+          }
+
+          updateCameraPanel();
+        } catch (_err) {
+          // silently ignore — form stays at defaults if saved state unavailable
+        }
       }
 
       function selectedProfileId() {

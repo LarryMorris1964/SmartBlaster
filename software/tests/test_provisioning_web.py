@@ -197,6 +197,46 @@ def test_device_info_reports_existing_camera_setup_values(tmp_path: Path) -> Non
     assert payload["camera_enabled"] is True
 
 
+def test_get_setup_returns_404_when_no_state(tmp_path: Path) -> None:
+    app = create_provisioning_app(ProvisioningService(state_file=tmp_path / "device_setup.json"))
+    client = TestClient(app)
+
+    response = client.get("/api/setup")
+
+    assert response.status_code == 404
+
+
+def test_get_setup_returns_saved_values(tmp_path: Path) -> None:
+    state_file = tmp_path / "device_setup.json"
+    state_file.write_text(
+        '{"device_name": "Living Room", "wifi_ssid": "MyNet", "thermostat_profile_id": "midea_kjr_12b_dp_t",'
+        ' "camera_enabled": true, "daily_on_time": "09:00", "daily_off_time": "14:00",'
+        ' "target_temperature_c": 24.0, "timezone": "America/New_York", "fan_mode": "auto",'
+        ' "solar_weekly_schedule": {}}',
+        encoding="utf-8",
+    )
+
+    app = create_provisioning_app(ProvisioningService(state_file=state_file))
+    client = TestClient(app)
+
+    response = client.get("/api/setup")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["device_name"] == "Living Room"
+    assert payload["wifi_ssid"] == "MyNet"
+    assert payload["thermostat_profile_id"] == "midea_kjr_12b_dp_t"
+    assert payload["camera_enabled"] is True
+    assert payload["daily_on_time"] == "09:00"
+    assert payload["daily_off_time"] == "14:00"
+    assert payload["target_temperature_c"] == 24.0
+    assert payload["timezone"] == "America/New_York"
+    # Internal state metadata should not be exposed
+    assert "setup_state_version" not in payload
+    assert "saved_by_software_version" not in payload
+    assert "config_schema_version" not in payload
+
+
 def test_portal_docs_endpoints_return_text() -> None:
     app = create_provisioning_app(ProvisioningService())
     client = TestClient(app)

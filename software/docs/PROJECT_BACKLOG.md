@@ -40,7 +40,20 @@ Open follow-ups:
 - Wire `activity_log.ir_command_verified` / `ir_command_verification_failed` into validation steps (covered by backlog item 4).
 - Persist report to disk and add history endpoint for later review.
 
-### 3. Home Automation Integration Design
+### 3. Portal Form Pre-Population from Saved State
+
+Status: Planned
+
+Goals:
+- On portal load, fetch existing saved state from a new `GET /api/setup` endpoint.
+- Populate all form fields (device name, Wi-Fi, profile, schedule, camera settings, inverter, etc.) with saved values.
+- If no saved state exists, form stays at defaults — no change to current behavior.
+
+Notes:
+- Currently the form always opens blank; users redoing setup must re-enter everything.
+- Endpoint should return the raw saved state dict; JS maps keys to input element IDs.
+
+### 4. Home Automation Integration Design
 
 Status: Planned
 
