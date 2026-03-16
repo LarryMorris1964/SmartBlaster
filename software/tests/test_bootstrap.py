@@ -2,8 +2,7 @@ from pathlib import Path
 
 import smartblaster.bootstrap as bootstrap
 import smartblaster.provisioning.system as system
-from smartblaster.bootstrap import _apply_setup_state_to_env, _load_setup_state, _resolve_mode
-from smartblaster.services.runtime import RuntimeNetworkUnavailable
+from smartblaster.bootstrap import _apply_setup_state_to_env, _load_setup_state, _resolve_mode, _wait_for_network_at_boot
 
 
 def test_resolve_mode_auto_without_state_uses_setup() -> None:
@@ -14,15 +13,12 @@ def test_resolve_mode_auto_with_state_uses_run() -> None:
     assert _resolve_mode("auto", state_exists=True) == "run"
 
 
-def test_resolve_mode_auto_with_force_setup_flag_uses_setup() -> None:
-    assert (
-        _resolve_mode(
-            "auto",
-            state_exists=True,
-            setup_state={"force_setup_on_next_boot": True},
-        )
-        == "setup"
-    )
+def test_resolve_mode_auto_with_state_but_no_wifi_uses_setup() -> None:
+    assert _resolve_mode("auto", state_exists=True, network_connected=False) == "setup"
+
+
+def test_resolve_mode_auto_with_state_and_wifi_uses_run() -> None:
+    assert _resolve_mode("auto", state_exists=True, network_connected=True) == "run"
 
 
 def test_resolve_mode_explicit_run() -> None:
@@ -156,13 +152,14 @@ def test_load_setup_state_migrates_legacy_payload(tmp_path) -> None:
     assert loaded["device_name"] == "SmartBlaster"
 
 
-def test_run_runtime_network_failure_sets_force_setup_and_requests_reboot(monkeypatch, tmp_path: Path) -> None:
+def test_run_runtime_runs_to_completion(monkeypatch, tmp_path: Path) -> None:
+    """Runtime runs to completion without any network guard or reboot."""
     state_file = tmp_path / "device_setup.json"
     state_file.write_text('{"wifi_ssid": "HomeWiFi", "config_schema_version": 1}', encoding="utf-8")
 
     class FakeRuntime:
         def run_forever(self) -> None:
-            raise RuntimeNetworkUnavailable("network unavailable")
+            return
 
     class FakeRuntimeFactory:
         @staticmethod
@@ -179,10 +176,43 @@ def test_run_runtime_network_failure_sets_force_setup_and_requests_reboot(monkey
 
     code = bootstrap._run_runtime(state_file)
 
-    assert code == 75
-    assert reboot_requested["called"] is True
-    loaded = bootstrap._load_setup_state(state_file)
-    assert loaded["force_setup_on_next_boot"] is True
+    assert code == 0
+    assert reboot_requested["called"] is False
+
+
+def test_wait_for_network_at_boot_succeeds_immediately() -> None:
+    result = _wait_for_network_at_boot(timeout_seconds=5, network_checker=lambda: True)
+    assert result is True
+
+
+def test_wait_for_network_at_boot_succeeds_after_retries(monkeypatch) -> None:
+    monkeypatch.setattr(bootstrap.time, "sleep", lambda _: None)
+    attempts = {"n": 0}
+
+    def checker() -> bool:
+        attempts["n"] += 1
+        return attempts["n"] >= 3
+
+    result = _wait_for_network_at_boot(timeout_seconds=60, poll_seconds=10, network_checker=checker)
+    assert result is True
+    assert attempts["n"] == 3
+
+
+def test_wait_for_network_at_boot_times_out(monkeypatch) -> None:
+    monkeypatch.setattr(bootstrap.time, "sleep", lambda _: None)
+    # Force time.monotonic to advance past the deadline on the second call
+    calls = {"n": 0}
+    original_monotonic = bootstrap.time.monotonic
+
+    def fake_monotonic() -> float:
+        calls["n"] += 1
+        # First call sets deadline; subsequent calls simulate time passing
+        return calls["n"] * 100.0
+
+    monkeypatch.setattr(bootstrap.time, "monotonic", fake_monotonic)
+
+    result = _wait_for_network_at_boot(timeout_seconds=1, network_checker=lambda: False)
+    assert result is False
 
 
 def test_reboot_commands_from_env_default_is_auto(monkeypatch) -> None:

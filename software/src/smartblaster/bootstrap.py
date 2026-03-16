@@ -15,26 +15,40 @@ import uvicorn
 
 from smartblaster.provisioning.ap_mode import ApModeController
 from smartblaster.provisioning.service import ProvisioningService
-from smartblaster.provisioning.state import load_setup_state, persist_setup_state
+from smartblaster.provisioning.state import load_setup_state
 from smartblaster.provisioning.system import network_connected_best_effort, request_reboot, reboot_commands_from_env
 from smartblaster.provisioning.web import create_provisioning_app
-from smartblaster.services.activity_log import ActivityLogger
-from smartblaster.services.runtime import RuntimeNetworkUnavailable, SmartBlasterRuntime
+from smartblaster.services.runtime import SmartBlasterRuntime
 
 
 def _setup_state_exists(state_file: Path) -> bool:
     return state_file.exists()
 
 
-def _resolve_mode(requested_mode: str, *, state_exists: bool, setup_state: dict[str, object] | None = None) -> str:
+def _resolve_mode(
+    requested_mode: str,
+    *,
+    state_exists: bool,
+    network_connected: bool = True,
+) -> str:
+    """Decide operating mode.
+
+    Boot-time logic ("auto"):
+    - No saved state → setup (first-run provisioning, no auto-recover).
+    - Saved state + WiFi not connected at boot → setup with auto-recover
+      (allows user to re-enter credentials; reverts to runtime when WiFi returns).
+    - Saved state + WiFi connected (or unknown) → runtime.
+    """
     requested = requested_mode.lower().strip()
     if requested not in {"auto", "setup", "run"}:
         raise ValueError("mode must be one of: auto, setup, run")
 
     if requested == "auto":
-        if state_exists and isinstance(setup_state, dict) and setup_state.get("force_setup_on_next_boot") is True:
+        if not state_exists:
             return "setup"
-        return "run" if state_exists else "setup"
+        if not network_connected:
+            return "setup"
+        return "run"
     return requested
 
 
@@ -239,15 +253,31 @@ def _run_runtime(state_file: Path) -> int:
     setup = _load_setup_state(state_file)
     _apply_setup_state_to_env(setup)
     runtime = SmartBlasterRuntime.from_env()
-    try:
-        runtime.run_forever()
-    except RuntimeNetworkUnavailable as ex:
-        setup["force_setup_on_next_boot"] = True
-        persist_setup_state(state_file, setup)
-        ActivityLogger().network_failover(reason=str(ex))
-        request_reboot()
-        return 75
+    runtime.run_forever()
     return 0
+
+
+def _wait_for_network_at_boot(
+    *,
+    timeout_seconds: int,
+    poll_seconds: int = 10,
+    network_checker=network_connected_best_effort,
+) -> bool:
+    """Poll for network connectivity at boot, returning True as soon as it's up.
+
+    After a power outage the Pi frequently boots before the router finishes
+    recovering.  Rather than a single immediate check (which would incorrectly
+    route to the setup portal), we retry for *timeout_seconds* so that a
+    temporarily-absent router is treated the same as a connected one.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if network_checker():
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(poll_seconds, remaining))
 
 
 def _start_setup_auto_recover_thread() -> None:
@@ -302,14 +332,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     state_file = Path(args.state_file)
-    setup_state = _load_setup_state(state_file) if _setup_state_exists(state_file) else None
-    mode = _resolve_mode(args.mode, state_exists=_setup_state_exists(state_file), setup_state=setup_state)
-    setup_auto_recover_enabled = False
-
-    if mode == "setup" and isinstance(setup_state, dict) and setup_state.get("force_setup_on_next_boot") is True:
-        setup_auto_recover_enabled = True
-        setup_state["force_setup_on_next_boot"] = False
-        persist_setup_state(state_file, setup_state)
+    state_exists = _setup_state_exists(state_file)
+    # When a saved state exists we wait up to SMARTBLASTER_NETWORK_BOOT_WAIT_SECONDS
+    # (default 60 s) for WiFi before deciding the device is offline.  This handles
+    # the common power-outage case where the Pi reboots faster than the router.
+    if state_exists:
+        boot_wait = max(0, int(os.getenv("SMARTBLASTER_NETWORK_BOOT_WAIT_SECONDS", "60")))
+        network_connected = _wait_for_network_at_boot(timeout_seconds=boot_wait)
+    else:
+        network_connected = True
+    mode = _resolve_mode(args.mode, state_exists=state_exists, network_connected=network_connected)
+    # Auto-recover is enabled when we have a saved state but no WiFi at boot:
+    # the portal will revert to runtime automatically once the network comes back.
+    setup_auto_recover_enabled = (mode == "setup" and state_exists and not network_connected)
 
     if mode == "setup":
         return _run_setup_server(

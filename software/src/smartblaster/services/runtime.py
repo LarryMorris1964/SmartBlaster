@@ -17,13 +17,8 @@ from smartblaster.services.reference_offload import NoopReferenceOffloadTranspor
 from smartblaster.services.thermostat_status import ThermostatStatusService
 from smartblaster.temperature import quantize_program_setpoint_for_thermostat, thermostat_to_program_celsius
 from smartblaster.thermostats.library import get_command_policy, get_profile
-from smartblaster.provisioning.system import network_connected_best_effort
 from smartblaster.vision.models import ThermostatDisplayState
 from smartblaster.vision.registry import create_parser_for_model
-
-
-class RuntimeNetworkUnavailable(RuntimeError):
-    """Raised when runtime detects there is no active network connection."""
 
 
 class SmartBlasterRuntime:
@@ -179,9 +174,6 @@ class SmartBlasterRuntime:
         return new_state
 
     def run_forever(self) -> None:
-        if not _network_connected_for_runtime():
-            raise RuntimeNetworkUnavailable("runtime network unavailable")
-
         self._act_log.runtime_started(
             profile_id=self.thermostat_profile_id,
             camera_enabled=self.camera is not None,
@@ -253,6 +245,3 @@ def _command_name_for_event(event: str, mode: object) -> str:
         return "power_off"
     return "set_mode"
 
-
-def _network_connected_for_runtime() -> bool:
-    return network_connected_best_effort()
