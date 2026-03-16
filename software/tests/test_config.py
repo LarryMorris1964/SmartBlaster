@@ -24,4 +24,9 @@ def test_default_runtime_config() -> None:
     assert cfg.status_history_file == "data/thermostat_status_history.log"
     assert cfg.status_diagnostic_mode is False
     assert cfg.status_image_dir == "data/status_images"
+    assert cfg.reference_image_dir == "data/reference_images"
+    assert cfg.reference_capture_on_parse_failure is True
+    assert cfg.training_mode_enabled is False
+    assert cfg.training_capture_interval_minutes == 60
+    assert cfg.validate_capabilities_enabled is False
     assert cfg.config_schema_version == 1

@@ -34,6 +34,10 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
             status_diagnostic_mode=True,
             status_image_dir="data/status_images",
             reference_image_dir="data/reference_images",
+            reference_capture_on_parse_failure=True,
+            training_mode_enabled=True,
+            training_capture_interval_minutes=60,
+            validate_capabilities_enabled=True,
             config_schema_version=1,
         )
     )
@@ -52,6 +56,10 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
     assert "thermostat_status_history.log" in text
     assert "status_images" in text
     assert "reference_images" in text
+    assert '"reference_capture_on_parse_failure": true' in text
+    assert '"training_mode_enabled": true' in text
+    assert '"training_capture_interval_minutes": 60' in text
+    assert '"validate_capabilities_enabled": true' in text
 
 
 

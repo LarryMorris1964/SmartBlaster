@@ -119,6 +119,38 @@ def _apply_setup_state_to_env(setup: dict[str, object]) -> None:
     if isinstance(status_image_dir, str) and status_image_dir.strip():
         os.environ.setdefault("SMARTBLASTER_STATUS_IMAGE_DIR", status_image_dir)
 
+    reference_image_dir = setup.get("reference_image_dir")
+    if isinstance(reference_image_dir, str) and reference_image_dir.strip():
+        os.environ.setdefault("SMARTBLASTER_REFERENCE_IMAGE_DIR", reference_image_dir)
+
+    reference_capture_on_parse_failure = setup.get("reference_capture_on_parse_failure")
+    if isinstance(reference_capture_on_parse_failure, bool):
+        os.environ.setdefault(
+            "SMARTBLASTER_REFERENCE_CAPTURE_ON_PARSE_FAILURE",
+            "true" if reference_capture_on_parse_failure else "false",
+        )
+
+    training_mode_enabled = setup.get("training_mode_enabled")
+    if isinstance(training_mode_enabled, bool):
+        os.environ.setdefault(
+            "SMARTBLASTER_TRAINING_MODE_ENABLED",
+            "true" if training_mode_enabled else "false",
+        )
+
+    training_capture_interval_minutes = setup.get("training_capture_interval_minutes")
+    if isinstance(training_capture_interval_minutes, int) and training_capture_interval_minutes >= 1:
+        os.environ.setdefault(
+            "SMARTBLASTER_TRAINING_CAPTURE_INTERVAL_MINUTES",
+            str(training_capture_interval_minutes),
+        )
+
+    validate_capabilities_enabled = setup.get("validate_capabilities_enabled")
+    if isinstance(validate_capabilities_enabled, bool):
+        os.environ.setdefault(
+            "SMARTBLASTER_VALIDATE_CAPABILITIES_ENABLED",
+            "true" if validate_capabilities_enabled else "false",
+        )
+
     config_schema_version = setup.get("config_schema_version")
     if isinstance(config_schema_version, int) and config_schema_version >= 1:
         os.environ.setdefault("SMARTBLASTER_CONFIG_SCHEMA_VERSION", str(config_schema_version))

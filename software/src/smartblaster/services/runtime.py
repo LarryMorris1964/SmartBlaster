@@ -81,6 +81,8 @@ class SmartBlasterRuntime:
                 history_file=Path(cfg.status_history_file),
                 diagnostic_save_images=cfg.status_diagnostic_mode,
                 diagnostic_image_dir=Path(cfg.status_image_dir),
+                reference_capture_on_parse_failure=cfg.reference_capture_on_parse_failure,
+                reference_image_dir=Path(cfg.reference_image_dir),
                 manage_camera_lifecycle=False,
             )
 

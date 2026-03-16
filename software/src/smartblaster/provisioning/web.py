@@ -39,6 +39,10 @@ class SetupPayload(BaseModel):
   status_diagnostic_mode: bool = False
   status_image_dir: str = Field(default="data/status_images")
   reference_image_dir: str = Field(default="data/reference_images")
+  reference_capture_on_parse_failure: bool = True
+  training_mode_enabled: bool = False
+  training_capture_interval_minutes: int = Field(default=60, ge=1)
+  validate_capabilities_enabled: bool = False
   config_schema_version: int = Field(default=1, ge=1)
 
 
@@ -47,6 +51,7 @@ class CameraReferencePayload(BaseModel):
   phase: str = Field(default="install_camera_setup", min_length=1)
   label: str | None = None
   include_overlay: bool = True
+  reference_image_dir: str | None = None
 
 
 def create_provisioning_app(
@@ -94,6 +99,10 @@ def create_provisioning_app(
                     status_diagnostic_mode=payload.status_diagnostic_mode,
                     status_image_dir=payload.status_image_dir,
                     reference_image_dir=payload.reference_image_dir,
+                    reference_capture_on_parse_failure=payload.reference_capture_on_parse_failure,
+                    training_mode_enabled=payload.training_mode_enabled,
+                    training_capture_interval_minutes=payload.training_capture_interval_minutes,
+                    validate_capabilities_enabled=payload.validate_capabilities_enabled,
                     config_schema_version=payload.config_schema_version,
                 )
             )
@@ -132,6 +141,7 @@ def create_provisioning_app(
                 phase=payload.phase,
                 label=payload.label,
                 include_overlay=payload.include_overlay,
+              reference_image_dir=Path(payload.reference_image_dir) if payload.reference_image_dir else None,
             )
         except Exception as ex:
             raise HTTPException(status_code=503, detail=str(ex)) from ex
@@ -262,6 +272,15 @@ def create_provisioning_app(
       <label>Reference Image Directory</label>
       <input id="referenceImageDir" value="data/reference_images" />
 
+      <label><input id="referenceCaptureOnFailure" type="checkbox" checked /> Save failed parses as reference captures</label>
+
+      <label><input id="trainingModeEnabled" type="checkbox" /> Training mode (periodic reference captures)</label>
+
+      <label>Training Capture Interval (minutes)</label>
+      <input id="trainingCaptureIntervalMinutes" type="number" min="1" step="1" value="60" />
+
+      <label><input id="validateCapabilitiesEnabled" type="checkbox" /> Validate capabilities by cycling thermostat settings</label>
+
       <button id=\"save\">Save Setup</button>
       <p id=\"result\" class=\"hint\"></p>
     </section>
@@ -371,6 +390,7 @@ def create_provisioning_app(
             phase: 'install_camera_setup',
             label: document.getElementById('referenceLabel').value,
             include_overlay: true,
+            reference_image_dir: document.getElementById('referenceImageDir').value,
           }),
         });
 
@@ -408,6 +428,10 @@ def create_provisioning_app(
           status_diagnostic_mode: document.getElementById('statusDiagnosticMode').checked,
           status_image_dir: document.getElementById('statusImageDir').value,
           reference_image_dir: document.getElementById('referenceImageDir').value,
+          reference_capture_on_parse_failure: document.getElementById('referenceCaptureOnFailure').checked,
+          training_mode_enabled: document.getElementById('trainingModeEnabled').checked,
+          training_capture_interval_minutes: parseInt(document.getElementById('trainingCaptureIntervalMinutes').value || '60', 10),
+          validate_capabilities_enabled: document.getElementById('validateCapabilitiesEnabled').checked,
           config_schema_version: 1,
         };
 

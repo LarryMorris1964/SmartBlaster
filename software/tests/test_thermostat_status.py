@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from PIL import Image
+
+from smartblaster.services.reference_images import ReferenceImageStore
 from smartblaster.services.thermostat_status import ThermostatStatusService
 from smartblaster.vision.models import (
     DisplayMode,
@@ -39,6 +42,16 @@ class FakeParser:
             timer_set=True,
             follow_me_enabled=False,
         )
+
+
+class FailingParser:
+    model_id = "midea_kjr_12b_dp_t"
+
+    def parse(self, frame: bytes) -> ThermostatDisplayState:  # noqa: ARG002
+        raise ValueError("parse failed")
+
+    def debug_overlays(self, frame: bytes) -> dict[str, Image.Image]:  # noqa: ARG002
+        return {"original_bounds": Image.new("RGB", (64, 32), color=(120, 140, 160))}
 
 
 def test_request_status_logs_history(tmp_path: Path) -> None:
@@ -105,3 +118,29 @@ def test_request_status_does_not_manage_camera_when_disabled(tmp_path: Path) -> 
 
     assert camera.started is False
     assert camera.stopped is False
+
+
+def test_request_status_saves_reference_capture_on_parse_failure(tmp_path: Path) -> None:
+    reference_dir = tmp_path / "references"
+    service = ThermostatStatusService(
+        camera=FakeCamera(frame=b"img"),
+        parser=FailingParser(),
+        history_file=tmp_path / "history.log",
+        reference_capture_on_parse_failure=True,
+        reference_image_store=ReferenceImageStore(reference_dir),
+    )
+
+    try:
+        service.request_status()
+        assert False, "expected ValueError"
+    except ValueError as ex:
+        assert "parse failed" in str(ex)
+
+    saved = list((reference_dir / "runtime_parse_failure").iterdir())
+    assert any(path.suffix == ".jpg" for path in saved)
+    assert any(path.name.endswith(".overlay.jpg") for path in saved)
+    metadata_files = [path for path in saved if path.suffix == ".json"]
+    assert len(metadata_files) == 1
+    metadata = metadata_files[0].read_text(encoding="utf-8")
+    assert "parse failed" in metadata
+    assert "ValueError" in metadata

@@ -13,6 +13,7 @@ from typing import Callable
 from PIL import Image, ImageDraw
 
 from smartblaster.hardware.camera import CameraService
+from smartblaster.services.reference_images import ReferenceImageStore
 from smartblaster.vision.parser import ThermostatDisplayParser
 from smartblaster.vision.registry import create_parser_for_model
 
@@ -29,71 +30,6 @@ class CameraSetupStatus:
     parser_confidence: float
     recommended_action: str
     parsed_summary: dict[str, object]
-
-
-class ReferenceImageStore:
-    """Persist raw/overlay reference images with JSON sidecar metadata."""
-
-    def __init__(self, base_dir: Path | None = None) -> None:
-        self.base_dir = base_dir or Path("data/reference_images")
-
-    def save(
-        self,
-        *,
-        frame: bytes,
-        profile_id: str,
-        phase: str,
-        status: CameraSetupStatus,
-        label: str | None = None,
-        overlay_frame: bytes | None = None,
-    ) -> dict[str, object]:
-        timestamp = datetime.now(timezone.utc)
-        safe_phase = _slug(phase or "unspecified")
-        safe_profile = _slug(profile_id or "unknown-profile")
-        safe_label = _slug(label or "reference")
-
-        phase_dir = self.base_dir / safe_phase
-        phase_dir.mkdir(parents=True, exist_ok=True)
-
-        stem = f"{timestamp.strftime('%Y%m%dT%H%M%S.%fZ')}_{safe_profile}_{safe_label}"
-        raw_path = phase_dir / f"{stem}.jpg"
-        raw_path.write_bytes(frame)
-
-        overlay_path: Path | None = None
-        if overlay_frame is not None:
-            overlay_path = phase_dir / f"{stem}.overlay.jpg"
-            overlay_path.write_bytes(overlay_frame)
-
-        metadata = {
-            "captured_at_utc": timestamp.isoformat(),
-            "profile_id": profile_id,
-            "phase": phase,
-            "label": label,
-            "raw_image": str(raw_path),
-            "overlay_image": str(overlay_path) if overlay_path is not None else None,
-            "status": {
-                "frame_available": status.frame_available,
-                "display_readable": status.display_readable,
-                "focus_score": status.focus_score,
-                "focus_good": status.focus_good,
-                "glare_ratio": status.glare_ratio,
-                "glare_low": status.glare_low,
-                "exposure_score": status.exposure_score,
-                "parser_confidence": status.parser_confidence,
-                "recommended_action": status.recommended_action,
-                "parsed_summary": status.parsed_summary,
-            },
-        }
-
-        metadata_path = phase_dir / f"{stem}.json"
-        metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-        return {
-            "captured_at_utc": metadata["captured_at_utc"],
-            "raw_image": str(raw_path),
-            "overlay_image": str(overlay_path) if overlay_path is not None else None,
-            "metadata_file": str(metadata_path),
-        }
-
 
 class CameraSetupService:
     def __init__(
@@ -126,16 +62,31 @@ class CameraSetupService:
         phase: str,
         label: str | None = None,
         include_overlay: bool = True,
+        reference_image_dir: Path | None = None,
     ) -> dict[str, object]:
         frame = self._capture_frame()
         status, preview = self._analyze_frame(frame, profile_id=profile_id, overlay=include_overlay)
         overlay_bytes = _encode_jpeg(preview) if include_overlay else None
-        return self.reference_store.save(
+        store = self.reference_store if reference_image_dir is None else ReferenceImageStore(reference_image_dir)
+        return store.save_capture(
             frame=frame,
             profile_id=profile_id,
             phase=phase,
-            status=status,
             label=label,
+            metadata={
+                "status": {
+                    "frame_available": status.frame_available,
+                    "display_readable": status.display_readable,
+                    "focus_score": status.focus_score,
+                    "focus_good": status.focus_good,
+                    "glare_ratio": status.glare_ratio,
+                    "glare_low": status.glare_low,
+                    "exposure_score": status.exposure_score,
+                    "parser_confidence": status.parser_confidence,
+                    "recommended_action": status.recommended_action,
+                    "parsed_summary": status.parsed_summary,
+                }
+            },
             overlay_frame=overlay_bytes,
         )
 
@@ -288,9 +239,3 @@ def _draw_status_banner(image: Image.Image, status: CameraSetupStatus) -> None:
     )
     draw.text((8, 6), summary, fill=(255, 255, 255))
     draw.text((8, 24), status.recommended_action, fill=(255, 255, 255))
-
-
-def _slug(value: str) -> str:
-    normalized = re.sub(r"[^a-zA-Z0-9._-]+", "-", value.strip())
-    normalized = normalized.strip("-._")
-    return normalized or "item"

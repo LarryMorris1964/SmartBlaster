@@ -36,6 +36,10 @@ class SetupRequest:
     status_diagnostic_mode: bool = False
     status_image_dir: str = "data/status_images"
     reference_image_dir: str = "data/reference_images"
+    reference_capture_on_parse_failure: bool = True
+    training_mode_enabled: bool = False
+    training_capture_interval_minutes: int = 60
+    validate_capabilities_enabled: bool = False
     config_schema_version: int = 1
 
 
@@ -118,6 +122,8 @@ class ProvisioningService:
             raise ValueError("status_image_dir is required")
         if not request.reference_image_dir.strip():
             raise ValueError("reference_image_dir is required")
+        if request.training_capture_interval_minutes < 1:
+            raise ValueError("training_capture_interval_minutes must be >= 1")
         if request.config_schema_version < 1:
             raise ValueError("config_schema_version must be >= 1")
 
@@ -162,6 +168,10 @@ class ProvisioningService:
             "status_diagnostic_mode": request.status_diagnostic_mode,
             "status_image_dir": request.status_image_dir,
             "reference_image_dir": request.reference_image_dir,
+            "reference_capture_on_parse_failure": request.reference_capture_on_parse_failure,
+            "training_mode_enabled": request.training_mode_enabled,
+            "training_capture_interval_minutes": request.training_capture_interval_minutes,
+            "validate_capabilities_enabled": request.validate_capabilities_enabled,
             "config_schema_version": request.config_schema_version,
         }
         tmp_file = self.state_file.with_suffix(f"{self.state_file.suffix}.tmp")

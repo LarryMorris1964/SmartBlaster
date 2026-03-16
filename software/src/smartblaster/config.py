@@ -31,6 +31,11 @@ class RuntimeConfig:
     status_history_file: str = "data/thermostat_status_history.log"
     status_diagnostic_mode: bool = False
     status_image_dir: str = "data/status_images"
+    reference_image_dir: str = "data/reference_images"
+    reference_capture_on_parse_failure: bool = True
+    training_mode_enabled: bool = False
+    training_capture_interval_minutes: int = 60
+    validate_capabilities_enabled: bool = False
     config_schema_version: int = 1
 
 
@@ -68,5 +73,10 @@ def from_env() -> RuntimeConfig:
         status_history_file=os.getenv("SMARTBLASTER_STATUS_HISTORY_FILE", "data/thermostat_status_history.log"),
         status_diagnostic_mode=_env_bool("SMARTBLASTER_STATUS_DIAGNOSTIC_MODE", False),
         status_image_dir=os.getenv("SMARTBLASTER_STATUS_IMAGE_DIR", "data/status_images"),
+        reference_image_dir=os.getenv("SMARTBLASTER_REFERENCE_IMAGE_DIR", "data/reference_images"),
+        reference_capture_on_parse_failure=_env_bool("SMARTBLASTER_REFERENCE_CAPTURE_ON_PARSE_FAILURE", True),
+        training_mode_enabled=_env_bool("SMARTBLASTER_TRAINING_MODE_ENABLED", False),
+        training_capture_interval_minutes=int(os.getenv("SMARTBLASTER_TRAINING_CAPTURE_INTERVAL_MINUTES", "60")),
+        validate_capabilities_enabled=_env_bool("SMARTBLASTER_VALIDATE_CAPABILITIES_ENABLED", False),
         config_schema_version=int(os.getenv("SMARTBLASTER_CONFIG_SCHEMA_VERSION", "1")),
     )

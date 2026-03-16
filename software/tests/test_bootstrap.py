@@ -33,6 +33,11 @@ def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
         "SMARTBLASTER_STATUS_HISTORY_FILE",
         "SMARTBLASTER_STATUS_DIAGNOSTIC_MODE",
         "SMARTBLASTER_STATUS_IMAGE_DIR",
+        "SMARTBLASTER_REFERENCE_IMAGE_DIR",
+        "SMARTBLASTER_REFERENCE_CAPTURE_ON_PARSE_FAILURE",
+        "SMARTBLASTER_TRAINING_MODE_ENABLED",
+        "SMARTBLASTER_TRAINING_CAPTURE_INTERVAL_MINUTES",
+        "SMARTBLASTER_VALIDATE_CAPABILITIES_ENABLED",
         "SMARTBLASTER_CONFIG_SCHEMA_VERSION",
     ]
     for key in keys:
@@ -58,6 +63,11 @@ def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
             "status_history_file": "data/thermostat_status_history.log",
             "status_diagnostic_mode": True,
             "status_image_dir": "data/status_images",
+            "reference_image_dir": "data/reference_images",
+            "reference_capture_on_parse_failure": True,
+            "training_mode_enabled": True,
+            "training_capture_interval_minutes": 60,
+            "validate_capabilities_enabled": True,
             "config_schema_version": 1,
         }
     )
@@ -82,6 +92,11 @@ def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
     assert os.environ["SMARTBLASTER_STATUS_HISTORY_FILE"] == "data/thermostat_status_history.log"
     assert os.environ["SMARTBLASTER_STATUS_DIAGNOSTIC_MODE"] == "true"
     assert os.environ["SMARTBLASTER_STATUS_IMAGE_DIR"] == "data/status_images"
+    assert os.environ["SMARTBLASTER_REFERENCE_IMAGE_DIR"] == "data/reference_images"
+    assert os.environ["SMARTBLASTER_REFERENCE_CAPTURE_ON_PARSE_FAILURE"] == "true"
+    assert os.environ["SMARTBLASTER_TRAINING_MODE_ENABLED"] == "true"
+    assert os.environ["SMARTBLASTER_TRAINING_CAPTURE_INTERVAL_MINUTES"] == "60"
+    assert os.environ["SMARTBLASTER_VALIDATE_CAPABILITIES_ENABLED"] == "true"
     assert os.environ["SMARTBLASTER_CONFIG_SCHEMA_VERSION"] == "1"
 
 

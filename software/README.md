@@ -173,6 +173,17 @@ The captive portal setup page now includes a `Camera Setup` section intended for
 
 Reference images are stored under `data/reference_images/<phase>/...` so the same storage layout can be reused later for runtime/support lifecycle snapshots.
 
+Current lifecycle hook:
+- runtime parse failures can automatically save the failed source image, overlay, and error context into the reference-image store
+
+Provisioning now also persists future-facing capture options:
+- `reference_capture_on_parse_failure`
+- `training_mode_enabled`
+- `training_capture_interval_minutes`
+- `validate_capabilities_enabled`
+
+The training-mode and capability-validation workflows are not fully automated yet, but their settings now flow through setup state into runtime configuration so later hooks can reuse the same reference-image storage path.
+
 ## Device Bootstrap Mode
 
 Use one command to choose setup vs runtime automatically:
