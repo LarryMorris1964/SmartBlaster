@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from smartblaster.bootstrap import _apply_setup_state_to_env, _resolve_mode
 
 
@@ -7,10 +5,8 @@ def test_resolve_mode_auto_without_state_uses_setup() -> None:
     assert _resolve_mode("auto", state_exists=False) == "setup"
 
 
-
 def test_resolve_mode_auto_with_state_uses_run() -> None:
     assert _resolve_mode("auto", state_exists=True) == "run"
-
 
 
 def test_resolve_mode_explicit_run() -> None:
@@ -18,22 +14,29 @@ def test_resolve_mode_explicit_run() -> None:
 
 
 def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
-    monkeypatch.delenv("SMARTBLASTER_THERMOSTAT_PROFILE_ID", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_CAMERA_ENABLED", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_DAILY_ON_TIME", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_DAILY_OFF_TIME", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_TARGET_TEMPERATURE_C", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_TIMEZONE", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_ACTIVE_DAYS", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_FAN_MODE", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_SWING_MODE", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_PRESET_MODE", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_THERMOSTAT_TEMPERATURE_UNIT", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_INVERTER_SOURCE_ENABLED", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_INVERTER_SOURCE_TYPE", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_INVERTER_SURPLUS_START_W", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_INVERTER_SURPLUS_STOP_W", raising=False)
-    monkeypatch.delenv("SMARTBLASTER_CONFIG_SCHEMA_VERSION", raising=False)
+    keys = [
+        "SMARTBLASTER_THERMOSTAT_PROFILE_ID",
+        "SMARTBLASTER_CAMERA_ENABLED",
+        "SMARTBLASTER_DAILY_ON_TIME",
+        "SMARTBLASTER_DAILY_OFF_TIME",
+        "SMARTBLASTER_TARGET_TEMPERATURE_C",
+        "SMARTBLASTER_TIMEZONE",
+        "SMARTBLASTER_ACTIVE_DAYS",
+        "SMARTBLASTER_FAN_MODE",
+        "SMARTBLASTER_SWING_MODE",
+        "SMARTBLASTER_PRESET_MODE",
+        "SMARTBLASTER_THERMOSTAT_TEMPERATURE_UNIT",
+        "SMARTBLASTER_INVERTER_SOURCE_ENABLED",
+        "SMARTBLASTER_INVERTER_SOURCE_TYPE",
+        "SMARTBLASTER_INVERTER_SURPLUS_START_W",
+        "SMARTBLASTER_INVERTER_SURPLUS_STOP_W",
+        "SMARTBLASTER_STATUS_HISTORY_FILE",
+        "SMARTBLASTER_STATUS_DIAGNOSTIC_MODE",
+        "SMARTBLASTER_STATUS_IMAGE_DIR",
+        "SMARTBLASTER_CONFIG_SCHEMA_VERSION",
+    ]
+    for key in keys:
+        monkeypatch.delenv(key, raising=False)
 
     _apply_setup_state_to_env(
         {
@@ -52,6 +55,9 @@ def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
             "inverter_source_type": "modbus-tcp",
             "inverter_surplus_start_w": 1800,
             "inverter_surplus_stop_w": 700,
+            "status_history_file": "data/thermostat_status_history.log",
+            "status_diagnostic_mode": True,
+            "status_image_dir": "data/status_images",
             "config_schema_version": 1,
         }
     )
@@ -73,6 +79,9 @@ def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
     assert os.environ["SMARTBLASTER_INVERTER_SOURCE_TYPE"] == "modbus-tcp"
     assert os.environ["SMARTBLASTER_INVERTER_SURPLUS_START_W"] == "1800"
     assert os.environ["SMARTBLASTER_INVERTER_SURPLUS_STOP_W"] == "700"
+    assert os.environ["SMARTBLASTER_STATUS_HISTORY_FILE"] == "data/thermostat_status_history.log"
+    assert os.environ["SMARTBLASTER_STATUS_DIAGNOSTIC_MODE"] == "true"
+    assert os.environ["SMARTBLASTER_STATUS_IMAGE_DIR"] == "data/status_images"
     assert os.environ["SMARTBLASTER_CONFIG_SCHEMA_VERSION"] == "1"
 
 

@@ -2,18 +2,42 @@
 
 from __future__ import annotations
 
+from io import BytesIO
+
 
 class CameraService:
+    def __init__(self) -> None:
+        self._camera = None
+
     def start(self) -> None:
-        # TODO: initialize picamera2 pipeline
-        pass
+        if self._camera is not None:
+            return
+        try:
+            from picamera2 import Picamera2  # type: ignore
+        except ImportError:
+            self._camera = None
+            return
+
+        camera = Picamera2()
+        config = camera.create_still_configuration()
+        camera.configure(config)
+        camera.start()
+        self._camera = camera
 
     def capture_frame(self) -> bytes | None:
-        # TODO: return encoded frame or structured data
-        return None
+        if self._camera is None:
+            return None
+
+        buffer = BytesIO()
+        self._camera.capture_file(buffer, format="jpeg")
+        return buffer.getvalue()
 
     def stop(self) -> None:
-        pass
+        if self._camera is None:
+            return
+        self._camera.stop()
+        self._camera.close()
+        self._camera = None
 
 
 class NoCameraService(CameraService):

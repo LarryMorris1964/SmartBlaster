@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartblaster.local/schemas/vision-label-line.schema.json",
+  "title": "SmartBlaster Vision Label Manifest Line",
+  "description": "One JSON object per line in labels JSONL files.",
+  "type": "object",
+  "required": ["filename", "expected"],
+  "additionalProperties": false,
+  "properties": {
+    "filename": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Image filename relative to images directory."
+    },
+    "expected": {
+      "type": "object",
+      "description": "Expected parser outputs. Include only fields you are confident about.",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["auto", "cool", "dry", "heat", "fan_only", "unknown"]
+        },
+        "set_temperature": {
+          "type": "number"
+        },
+        "set_temp": {
+          "type": "boolean",
+          "description": "True when the display shows the 'Set Temp' text indicator."
+        },
+        "temperature_unit": {
+          "type": "string",
+          "enum": ["C", "F"]
+        },
+        "fan_speed": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "off", "unknown"]
+        },
+        "timer_set": {
+          "type": "boolean"
+        },
+        "timer_on_enabled": {
+          "type": "boolean"
+        },
+        "timer_off_enabled": {
+          "type": "boolean"
+        },
+        "follow_me_enabled": {
+          "type": "boolean"
+        },
+        "power_on": {
+          "type": "boolean"
+        },
+        "lock_enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

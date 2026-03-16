@@ -54,6 +54,52 @@ smartblaster-cli --serial-port COM3 set --mode cool --temp 24 --fan medium --swi
 smartblaster-cli --serial-port COM3 off
 ```
 
+Request thermostat status via camera parse pipeline:
+
+```bash
+smartblaster-cli status --model-id midea_kjr_12b_dp_t \
+	--history-file data/thermostat_status_history.log
+```
+
+Enable diagnostic mode to also save each captured image for verification:
+
+```bash
+smartblaster-cli status --diagnostic-save-images --diagnostic-image-dir data/status_images
+```
+
+The status request flow is:
+- capture camera frame
+- parse display indicators (mode/fan/timer/follow-me/power/setpoint)
+- append a text-readable JSON-lines history record
+- optionally save source image in diagnostic mode
+
+## Offline Vision Validation (No Live Thermostat Required)
+
+You can evaluate parser quality against labeled JPEG samples without a full HVAC system:
+
+```bash
+smartblaster-cli vision-eval \
+	--model-id midea_kjr_12b_dp_t \
+	--images-dir data/samples/midea \
+	--labels-file data/samples/midea/labels.jsonl \
+	--output-report data/vision_eval_report.json
+```
+
+Use `data/samples/midea/labels.sample.jsonl` as a template for labels.
+
+Validate labels before running evaluation:
+
+```bash
+smartblaster-cli vision-validate-labels \
+	--labels-file data/samples/midea/labels.sample.jsonl \
+	--images-dir data/samples/midea
+```
+
+If validation fails, the command prints each issue and exits non-zero.
+
+Full label schema reference:
+- `data/samples/midea/labels.schema.json`
+
 ## Runtime Event Dispatch
 
 The runtime loop now maps high-level events to typed Midea commands:

@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import sys
 import uuid
 from typing import TextIO
 
+from smartblaster.hardware.camera import CameraService
 from smartblaster.ir.command import MideaFan, MideaIrCommand, MideaMode, MideaPreset, MideaSwing
 from smartblaster.ir.transport import Esp32IrBridgeClient
+from smartblaster.services.thermostat_status import ThermostatStatusService
+from smartblaster.vision.dataset import validate_labels_manifest
+from smartblaster.vision.evaluation import evaluate_dataset
+from smartblaster.vision.registry import create_parser_for_model
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -28,6 +34,22 @@ def create_parser() -> argparse.ArgumentParser:
     set_cmd.add_argument("--beeper", action="store_true")
 
     sub.add_parser("off", help="Power off HVAC")
+
+    status_cmd = sub.add_parser("status", help="Capture and parse thermostat display status")
+    status_cmd.add_argument("--model-id", default="midea_kjr_12b_dp_t")
+    status_cmd.add_argument("--history-file", default="data/thermostat_status_history.log")
+    status_cmd.add_argument("--diagnostic-save-images", action="store_true")
+    status_cmd.add_argument("--diagnostic-image-dir", default="data/status_images")
+
+    eval_cmd = sub.add_parser("vision-eval", help="Evaluate parser on labeled image dataset")
+    eval_cmd.add_argument("--model-id", default="midea_kjr_12b_dp_t")
+    eval_cmd.add_argument("--images-dir", required=True)
+    eval_cmd.add_argument("--labels-file", required=True, help="JSONL labels manifest")
+    eval_cmd.add_argument("--output-report", default="data/vision_eval_report.json")
+
+    validate_cmd = sub.add_parser("vision-validate-labels", help="Validate JSONL labels manifest")
+    validate_cmd.add_argument("--labels-file", required=True, help="JSONL labels manifest")
+    validate_cmd.add_argument("--images-dir", help="Optional image directory to check filename existence")
 
     return parser
 
@@ -61,6 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "status":
+        return _handle_status_command(args)
+    if args.command == "vision-eval":
+        return _handle_vision_eval_command(args)
+    if args.command == "vision-validate-labels":
+        return _handle_vision_validate_labels_command(args)
+
     command = build_command_from_args(args)
 
     request_id = str(uuid.uuid4())
@@ -73,6 +102,62 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     print(f"OK request_id={request_id}")
+    return 0
+
+
+def _handle_status_command(args: argparse.Namespace) -> int:
+    parser = create_parser_for_model(args.model_id)
+    camera = CameraService()
+    service = ThermostatStatusService(
+        camera=camera,
+        parser=parser,
+        history_file=Path(args.history_file),
+        diagnostic_save_images=bool(args.diagnostic_save_images),
+        diagnostic_image_dir=Path(args.diagnostic_image_dir),
+    )
+    state = service.request_status()
+    print(
+        "STATUS "
+        f"mode={state.mode.value} "
+        f"power_on={state.power_on} "
+        f"temp={state.set_temperature} "
+        f"unit={(state.temperature_unit.value if state.temperature_unit else None)} "
+        f"fan={state.fan_speed.value} "
+        f"timer_set={state.timer_set} "
+        f"follow_me={state.follow_me_enabled}"
+    )
+    return 0
+
+
+def _handle_vision_eval_command(args: argparse.Namespace) -> int:
+    parser = create_parser_for_model(args.model_id)
+    summary = evaluate_dataset(
+        parser=parser,
+        images_dir=Path(args.images_dir),
+        labels_file=Path(args.labels_file),
+        output_report=Path(args.output_report),
+    )
+    print(
+        "VISION_EVAL "
+        f"images={summary['images']} "
+        f"all_correct_images={summary['all_correct_images']} "
+        f"report={args.output_report}"
+    )
+    return 0
+
+
+def _handle_vision_validate_labels_command(args: argparse.Namespace) -> int:
+    labels_file = Path(args.labels_file)
+    images_dir = Path(args.images_dir) if args.images_dir else None
+    issues = validate_labels_manifest(labels_file, images_dir=images_dir)
+
+    if issues:
+        print("VISION_LABELS_INVALID")
+        for issue in issues:
+            print(f"- {issue}")
+        return 2
+
+    print(f"VISION_LABELS_OK labels={args.labels_file}")
     return 0
 
 

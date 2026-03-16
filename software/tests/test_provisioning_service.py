@@ -30,6 +30,9 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
             inverter_source_type="modbus-tcp",
             inverter_surplus_start_w=1500,
             inverter_surplus_stop_w=400,
+            status_history_file="data/thermostat_status_history.log",
+            status_diagnostic_mode=True,
+            status_image_dir="data/status_images",
             config_schema_version=1,
         )
     )
@@ -45,6 +48,8 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
     assert "America/Los_Angeles" in text
     assert "modbus-tcp" in text
     assert "\"thermostat_temperature_unit\": \"F\"" in text
+    assert "thermostat_status_history.log" in text
+    assert "status_images" in text
 
 
 

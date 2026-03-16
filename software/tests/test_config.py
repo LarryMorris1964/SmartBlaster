@@ -21,4 +21,7 @@ def test_default_runtime_config() -> None:
     assert cfg.inverter_source_type == "none"
     assert cfg.inverter_surplus_start_w == 0
     assert cfg.inverter_surplus_stop_w == 0
+    assert cfg.status_history_file == "data/thermostat_status_history.log"
+    assert cfg.status_diagnostic_mode is False
+    assert cfg.status_image_dir == "data/status_images"
     assert cfg.config_schema_version == 1

@@ -1,0 +1,3 @@
+{"filename":"sample_001.jpg","expected":{"mode":"cool","set_temperature":24.0,"set_temp":true,"fan_speed":"high","timer_set":true,"follow_me_enabled":true,"power_on":true}}
+{"filename":"sample_002.jpg","expected":{"mode":"cool","set_temperature":24.0,"set_temp":true,"fan_speed":"high","timer_set":true,"follow_me_enabled":true,"power_on":true}}
+{"filename":"sample_003.jpg","expected":{"mode":"cool","set_temperature":19.0,"fan_speed":"high","power_on":true}}

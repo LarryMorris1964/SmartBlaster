@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from smartblaster.config import from_env
 from smartblaster.control.state_machine import HvacStateMachine
@@ -10,8 +11,11 @@ from smartblaster.events.sources import CompositeEventSource, DailyTimeEventSour
 from smartblaster.hardware.camera import CameraService, NoCameraService
 from smartblaster.hardware.ir import IrService
 from smartblaster.ir.command import MideaFan, MideaPreset, MideaSwing
+from smartblaster.services.thermostat_status import ThermostatStatusService
 from smartblaster.temperature import quantize_program_setpoint_for_thermostat, thermostat_to_program_celsius
 from smartblaster.thermostats.library import get_profile
+from smartblaster.vision.models import ThermostatDisplayState
+from smartblaster.vision.registry import create_parser_for_model
 
 
 class SmartBlasterRuntime:
@@ -23,6 +27,7 @@ class SmartBlasterRuntime:
         ir: IrService,
         camera: CameraService,
         event_source: EventSource,
+        status_service: ThermostatStatusService | None = None,
         fan_mode: MideaFan = MideaFan.AUTO,
         swing_mode: MideaSwing = MideaSwing.OFF,
         preset_mode: MideaPreset = MideaPreset.NONE,
@@ -37,6 +42,7 @@ class SmartBlasterRuntime:
         self.ir = ir
         self.camera = camera
         self.event_source = event_source
+        self.status_service = status_service
         self.state_machine = HvacStateMachine()
 
     @classmethod
@@ -66,6 +72,18 @@ class SmartBlasterRuntime:
                 ),
             ]
         )
+
+        status_service: ThermostatStatusService | None = None
+        if cfg.camera_enabled:
+            status_service = ThermostatStatusService(
+                camera=camera,
+                parser=create_parser_for_model(profile.id),
+                history_file=Path(cfg.status_history_file),
+                diagnostic_save_images=cfg.status_diagnostic_mode,
+                diagnostic_image_dir=Path(cfg.status_image_dir),
+                manage_camera_lifecycle=False,
+            )
+
         return cls(
             loop_interval_ms=cfg.loop_interval_ms,
             target_temperature_c=cfg.target_temperature_c,
@@ -76,6 +94,7 @@ class SmartBlasterRuntime:
             ir=ir,
             camera=camera,
             event_source=event_source,
+            status_service=status_service,
         )
 
     def _target_setpoint_c_for_thermostat(self) -> float:
@@ -86,6 +105,11 @@ class SmartBlasterRuntime:
 
     def normalize_thermostat_temperature_to_program_c(self, reading: float) -> float:
         return thermostat_to_program_celsius(reading, self.thermostat_temperature_unit)
+
+    def request_thermostat_status(self) -> ThermostatDisplayState:
+        if self.status_service is None:
+            raise RuntimeError("camera status request unavailable: camera is disabled")
+        return self.status_service.request_status()
 
     def _apply_event(self, event: str, *, last_state: str) -> str:
         new_state = self.state_machine.handle_event(event)

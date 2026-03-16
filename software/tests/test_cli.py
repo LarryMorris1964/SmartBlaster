@@ -37,3 +37,62 @@ def test_cli_set_command_builds_payload_fields() -> None:
     assert payload["preset"] == "boost"
     assert payload["follow_me_c"] == 23
     assert payload["beeper"] is True
+
+
+def test_cli_status_command_parses_options() -> None:
+    parser = create_parser()
+    args = parser.parse_args(
+        [
+            "status",
+            "--model-id",
+            "midea_kjr_12b_dp_t",
+            "--history-file",
+            "data/history.log",
+            "--diagnostic-save-images",
+            "--diagnostic-image-dir",
+            "data/images",
+        ]
+    )
+    assert args.command == "status"
+    assert args.model_id == "midea_kjr_12b_dp_t"
+    assert args.history_file == "data/history.log"
+    assert args.diagnostic_save_images is True
+    assert args.diagnostic_image_dir == "data/images"
+
+
+def test_cli_vision_eval_command_parses_options() -> None:
+    parser = create_parser()
+    args = parser.parse_args(
+        [
+            "vision-eval",
+            "--model-id",
+            "midea_kjr_12b_dp_t",
+            "--images-dir",
+            "data/samples/midea",
+            "--labels-file",
+            "data/samples/midea/labels.jsonl",
+            "--output-report",
+            "data/vision_report.json",
+        ]
+    )
+    assert args.command == "vision-eval"
+    assert args.model_id == "midea_kjr_12b_dp_t"
+    assert args.images_dir == "data/samples/midea"
+    assert args.labels_file == "data/samples/midea/labels.jsonl"
+    assert args.output_report == "data/vision_report.json"
+
+
+def test_cli_vision_validate_labels_command_parses_options() -> None:
+    parser = create_parser()
+    args = parser.parse_args(
+        [
+            "vision-validate-labels",
+            "--labels-file",
+            "data/samples/midea/labels.jsonl",
+            "--images-dir",
+            "data/samples/midea",
+        ]
+    )
+    assert args.command == "vision-validate-labels"
+    assert args.labels_file == "data/samples/midea/labels.jsonl"
+    assert args.images_dir == "data/samples/midea"

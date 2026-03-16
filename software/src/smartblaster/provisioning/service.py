@@ -32,6 +32,9 @@ class SetupRequest:
     inverter_source_type: str = "none"
     inverter_surplus_start_w: int = 0
     inverter_surplus_stop_w: int = 0
+    status_history_file: str = "data/thermostat_status_history.log"
+    status_diagnostic_mode: bool = False
+    status_image_dir: str = "data/status_images"
     config_schema_version: int = 1
 
 
@@ -108,6 +111,10 @@ class ProvisioningService:
             raise ValueError("inverter_surplus_start_w must be >= inverter_surplus_stop_w")
         if request.inverter_source_enabled and request.inverter_source_type.strip().lower() == "none":
             raise ValueError("inverter_source_type is required when inverter_source_enabled is true")
+        if not request.status_history_file.strip():
+            raise ValueError("status_history_file is required")
+        if not request.status_image_dir.strip():
+            raise ValueError("status_image_dir is required")
         if request.config_schema_version < 1:
             raise ValueError("config_schema_version must be >= 1")
 
@@ -148,6 +155,9 @@ class ProvisioningService:
             "inverter_source_type": request.inverter_source_type,
             "inverter_surplus_start_w": request.inverter_surplus_start_w,
             "inverter_surplus_stop_w": request.inverter_surplus_stop_w,
+            "status_history_file": request.status_history_file,
+            "status_diagnostic_mode": request.status_diagnostic_mode,
+            "status_image_dir": request.status_image_dir,
             "config_schema_version": request.config_schema_version,
         }
         tmp_file = self.state_file.with_suffix(f"{self.state_file.suffix}.tmp")

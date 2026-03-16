@@ -104,6 +104,21 @@ def _apply_setup_state_to_env(setup: dict[str, object]) -> None:
     if isinstance(inverter_surplus_stop_w, int):
         os.environ.setdefault("SMARTBLASTER_INVERTER_SURPLUS_STOP_W", str(inverter_surplus_stop_w))
 
+    status_history_file = setup.get("status_history_file")
+    if isinstance(status_history_file, str) and status_history_file.strip():
+        os.environ.setdefault("SMARTBLASTER_STATUS_HISTORY_FILE", status_history_file)
+
+    status_diagnostic_mode = setup.get("status_diagnostic_mode")
+    if isinstance(status_diagnostic_mode, bool):
+        os.environ.setdefault(
+            "SMARTBLASTER_STATUS_DIAGNOSTIC_MODE",
+            "true" if status_diagnostic_mode else "false",
+        )
+
+    status_image_dir = setup.get("status_image_dir")
+    if isinstance(status_image_dir, str) and status_image_dir.strip():
+        os.environ.setdefault("SMARTBLASTER_STATUS_IMAGE_DIR", status_image_dir)
+
     config_schema_version = setup.get("config_schema_version")
     if isinstance(config_schema_version, int) and config_schema_version >= 1:
         os.environ.setdefault("SMARTBLASTER_CONFIG_SCHEMA_VERSION", str(config_schema_version))

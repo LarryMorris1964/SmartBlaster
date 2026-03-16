@@ -33,6 +33,9 @@ class SetupPayload(BaseModel):
   inverter_source_type: str = Field(default="none")
   inverter_surplus_start_w: int = Field(default=0, ge=0)
   inverter_surplus_stop_w: int = Field(default=0, ge=0)
+  status_history_file: str = Field(default="data/thermostat_status_history.log")
+  status_diagnostic_mode: bool = False
+  status_image_dir: str = Field(default="data/status_images")
   config_schema_version: int = Field(default=1, ge=1)
 
 
@@ -70,6 +73,9 @@ def create_provisioning_app(service: ProvisioningService | None = None) -> FastA
                     inverter_source_type=payload.inverter_source_type,
                     inverter_surplus_start_w=payload.inverter_surplus_start_w,
                     inverter_surplus_stop_w=payload.inverter_surplus_stop_w,
+                    status_history_file=payload.status_history_file,
+                    status_diagnostic_mode=payload.status_diagnostic_mode,
+                    status_image_dir=payload.status_image_dir,
                     config_schema_version=payload.config_schema_version,
                 )
             )
@@ -171,6 +177,14 @@ def create_provisioning_app(service: ProvisioningService | None = None) -> FastA
     <label>Inverter Surplus Stop (W)</label>
     <input id="inverterStopW" type="number" min="0" step="1" value="0" />
 
+    <label>Status History File</label>
+    <input id="statusHistoryFile" value="data/thermostat_status_history.log" />
+
+    <label><input id="statusDiagnosticMode" type="checkbox" /> Diagnostic mode (save each status image)</label>
+
+    <label>Status Image Directory</label>
+    <input id="statusImageDir" value="data/status_images" />
+
     <button id=\"save\">Save Setup</button>
     <p id=\"result\" class=\"hint\"></p>
 
@@ -207,6 +221,9 @@ def create_provisioning_app(service: ProvisioningService | None = None) -> FastA
           inverter_source_type: document.getElementById('inverterSourceType').value,
           inverter_surplus_start_w: parseInt(document.getElementById('inverterStartW').value || '0', 10),
           inverter_surplus_stop_w: parseInt(document.getElementById('inverterStopW').value || '0', 10),
+          status_history_file: document.getElementById('statusHistoryFile').value,
+          status_diagnostic_mode: document.getElementById('statusDiagnosticMode').checked,
+          status_image_dir: document.getElementById('statusImageDir').value,
           config_schema_version: 1,
         };
 

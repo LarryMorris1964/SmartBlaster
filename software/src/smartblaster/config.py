@@ -28,6 +28,9 @@ class RuntimeConfig:
     inverter_source_type: str = "none"
     inverter_surplus_start_w: int = 0
     inverter_surplus_stop_w: int = 0
+    status_history_file: str = "data/thermostat_status_history.log"
+    status_diagnostic_mode: bool = False
+    status_image_dir: str = "data/status_images"
     config_schema_version: int = 1
 
 
@@ -62,5 +65,8 @@ def from_env() -> RuntimeConfig:
         inverter_source_type=os.getenv("SMARTBLASTER_INVERTER_SOURCE_TYPE", "none"),
         inverter_surplus_start_w=int(os.getenv("SMARTBLASTER_INVERTER_SURPLUS_START_W", "0")),
         inverter_surplus_stop_w=int(os.getenv("SMARTBLASTER_INVERTER_SURPLUS_STOP_W", "0")),
+        status_history_file=os.getenv("SMARTBLASTER_STATUS_HISTORY_FILE", "data/thermostat_status_history.log"),
+        status_diagnostic_mode=_env_bool("SMARTBLASTER_STATUS_DIAGNOSTIC_MODE", False),
+        status_image_dir=os.getenv("SMARTBLASTER_STATUS_IMAGE_DIR", "data/status_images"),
         config_schema_version=int(os.getenv("SMARTBLASTER_CONFIG_SCHEMA_VERSION", "1")),
     )
