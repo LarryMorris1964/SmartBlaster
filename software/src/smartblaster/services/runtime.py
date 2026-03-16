@@ -32,8 +32,6 @@ class SmartBlasterRuntime:
         status_service: ThermostatStatusService | None = None,
         reference_offload_service: ReferenceOffloadService | None = None,
         reference_offload_interval_minutes: int = 15,
-        camera_health_required: bool = False,
-        camera_health_probe_interval_minutes: int = 5,
         reference_image_store: ReferenceImageStore | None = None,
         fan_mode: MideaFan = MideaFan.AUTO,
         swing_mode: MideaSwing = MideaSwing.OFF,
@@ -52,10 +50,7 @@ class SmartBlasterRuntime:
         self.status_service = status_service
         self.reference_offload_service = reference_offload_service
         self.reference_offload_interval_minutes = max(1, int(reference_offload_interval_minutes))
-        self.camera_health_required = camera_health_required
-        self.camera_health_probe_interval_minutes = max(1, int(camera_health_probe_interval_minutes))
         self.reference_image_store = reference_image_store
-        self._camera_alert_active = False
         self.state_machine = HvacStateMachine()
 
     @classmethod
@@ -122,8 +117,6 @@ class SmartBlasterRuntime:
             status_service=status_service,
             reference_offload_service=reference_offload_service,
             reference_offload_interval_minutes=cfg.reference_offload_interval_minutes,
-            camera_health_required=cfg.camera_enabled,
-            camera_health_probe_interval_minutes=cfg.camera_health_probe_interval_minutes,
             reference_image_store=reference_image_store,
         )
 
@@ -161,8 +154,6 @@ class SmartBlasterRuntime:
         self.camera.start()
         last_state = self.state_machine.state
         last_offload_monotonic = time.monotonic()
-        last_camera_probe_monotonic = time.monotonic()
-        self._probe_camera_health()
         try:
             while True:
                 scheduled_event = self.event_source.poll()
@@ -187,54 +178,11 @@ class SmartBlasterRuntime:
                             )
                         last_offload_monotonic = now
 
-                if self.camera_health_required:
-                    now = time.monotonic()
-                    probe_interval_s = self.camera_health_probe_interval_minutes * 60
-                    if (now - last_camera_probe_monotonic) >= probe_interval_s:
-                        self._probe_camera_health()
-                        last_camera_probe_monotonic = now
-
                 time.sleep(self.loop_interval_ms / 1000)
         except KeyboardInterrupt:
             print("Stopping SmartBlaster runtime")
         finally:
             self.camera.stop()
-
-    def _probe_camera_health(self) -> bool:
-        if not self.camera_health_required:
-            return True
-
-        frame_ok = False
-        error_message = "camera did not return a frame"
-        try:
-            frame = self.camera.capture_frame()
-            frame_ok = frame is not None and len(frame) > 0
-        except Exception as ex:
-            error_message = str(ex)
-
-        if frame_ok:
-            if self._camera_alert_active:
-                print("camera_health RECOVERED")
-            self._camera_alert_active = False
-            return True
-
-        if not self._camera_alert_active:
-            print(f"ALERT camera_expected_but_unavailable detail={error_message}")
-            if self.reference_image_store is not None:
-                self.reference_image_store.save_capture(
-                    frame=None,
-                    profile_id="camera_health",
-                    phase="camera_expected_unavailable",
-                    label="runtime_probe",
-                    metadata={
-                        "message": error_message,
-                        "camera_health_required": self.camera_health_required,
-                        "probe_interval_minutes": self.camera_health_probe_interval_minutes,
-                    },
-                )
-            self._camera_alert_active = True
-
-        return False
 
 
 def _parse_active_days(active_days_csv: str) -> list[str]:

@@ -22,7 +22,6 @@ class RuntimeConfig:
     swing_mode: str = "off"
     preset_mode: str = "none"
     camera_enabled: bool = False
-    camera_health_probe_interval_minutes: int = 5
     thermostat_profile_id: str = "midea_kjr_12b_dp_t"
     thermostat_temperature_unit: str = "C"
     inverter_source_enabled: bool = False
@@ -68,7 +67,6 @@ def from_env() -> RuntimeConfig:
         swing_mode=os.getenv("SMARTBLASTER_SWING_MODE", "off"),
         preset_mode=os.getenv("SMARTBLASTER_PRESET_MODE", "none"),
         camera_enabled=_env_bool("SMARTBLASTER_CAMERA_ENABLED", False),
-        camera_health_probe_interval_minutes=int(os.getenv("SMARTBLASTER_CAMERA_HEALTH_PROBE_INTERVAL_MINUTES", "5")),
         thermostat_profile_id=os.getenv("SMARTBLASTER_THERMOSTAT_PROFILE_ID", "midea_kjr_12b_dp_t"),
         thermostat_temperature_unit=os.getenv("SMARTBLASTER_THERMOSTAT_TEMPERATURE_UNIT", "C"),
         inverter_source_enabled=_env_bool("SMARTBLASTER_INVERTER_SOURCE_ENABLED", False),
