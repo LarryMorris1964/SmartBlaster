@@ -189,6 +189,10 @@ Offload skeleton (future work item):
 Current lifecycle hook:
 - runtime parse failures can automatically save the failed source image, overlay, and error context into the reference-image store
 
+Status request behavior now supports two camera/parse paths:
+- strict (`request_status`): used by command-verification logic; camera/parse failures are fatal to that transaction
+- best-effort (`request_status_best_effort`): used by opportunistic workflows (for example periodic snapshots); camera/parse failures are non-fatal and returned as typed outcomes
+
 Provisioning now also persists future-facing capture options:
 - `reference_capture_on_parse_failure`
 - `training_mode_enabled`

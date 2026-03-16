@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from io import BytesIO
@@ -13,6 +13,19 @@ from smartblaster.hardware.camera import CameraService
 from smartblaster.services.reference_images import ReferenceImageStore
 from smartblaster.vision.models import ThermostatDisplayState
 from smartblaster.vision.parser import ThermostatDisplayParser
+
+
+class StatusAttemptOutcome(str, Enum):
+    SUCCESS = "success"
+    CAMERA_UNAVAILABLE = "camera_unavailable"
+    PARSE_FAILED = "parse_failed"
+
+
+@dataclass(frozen=True)
+class StatusAttemptResult:
+    outcome: StatusAttemptOutcome
+    state: ThermostatDisplayState | None = None
+    error_message: str | None = None
 
 
 class ThermostatStatusService:
@@ -41,6 +54,27 @@ class ThermostatStatusService:
         )
 
     def request_status(self) -> ThermostatDisplayState:
+        """Strict status request used by command-verification paths.
+
+        Raises when camera/parse fails so higher-level verified command logic
+        can retry or escalate.
+        """
+        result = self.attempt_status()
+        if result.outcome == StatusAttemptOutcome.SUCCESS and result.state is not None:
+            return result.state
+        if result.outcome == StatusAttemptOutcome.CAMERA_UNAVAILABLE:
+            raise RuntimeError(result.error_message or "camera did not return a frame")
+        raise RuntimeError(result.error_message or "thermostat parse failed")
+
+    def request_status_best_effort(self) -> StatusAttemptResult:
+        """Non-fatal status request for opportunistic capture paths.
+
+        Intended for periodic/reference snapshot jobs where camera failure should
+        not break runtime control loops.
+        """
+        return self.attempt_status()
+
+    def attempt_status(self) -> StatusAttemptResult:
         if self.manage_camera_lifecycle:
             self.camera.start()
         try:
@@ -51,19 +85,28 @@ class ThermostatStatusService:
                     reason="camera_no_frame",
                     error=RuntimeError("camera did not return a frame"),
                 )
-                raise RuntimeError("camera did not return a frame")
+                return StatusAttemptResult(
+                    outcome=StatusAttemptOutcome.CAMERA_UNAVAILABLE,
+                    error_message="camera did not return a frame",
+                )
 
             try:
                 state = self.parser.parse(frame)
             except Exception as ex:
                 self._capture_failure_reference(frame=frame, reason="runtime_parse_failure", error=ex)
-                raise
+                return StatusAttemptResult(
+                    outcome=StatusAttemptOutcome.PARSE_FAILED,
+                    error_message=str(ex),
+                )
 
             timestamp = datetime.now(timezone.utc)
             self._append_history(timestamp, state)
             if self.diagnostic_save_images:
                 self._save_image(timestamp, frame)
-            return state
+            return StatusAttemptResult(
+                outcome=StatusAttemptOutcome.SUCCESS,
+                state=state,
+            )
         finally:
             if self.manage_camera_lifecycle:
                 self.camera.stop()

@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image
 
 from smartblaster.services.reference_images import ReferenceImageStore
-from smartblaster.services.thermostat_status import ThermostatStatusService
+from smartblaster.services.thermostat_status import StatusAttemptOutcome, ThermostatStatusService
 from smartblaster.vision.models import (
     DisplayMode,
     DisplayTemperatureUnit,
@@ -105,6 +105,20 @@ def test_request_status_raises_when_no_frame(tmp_path: Path) -> None:
         assert "camera did not return a frame" in str(ex)
 
 
+def test_request_status_best_effort_returns_camera_unavailable(tmp_path: Path) -> None:
+    service = ThermostatStatusService(
+        camera=FakeCamera(frame=None),
+        parser=FakeParser(),
+        history_file=tmp_path / "history.log",
+    )
+
+    result = service.request_status_best_effort()
+
+    assert result.outcome == StatusAttemptOutcome.CAMERA_UNAVAILABLE
+    assert result.state is None
+    assert result.error_message is not None
+
+
 def test_request_status_does_not_manage_camera_when_disabled(tmp_path: Path) -> None:
     camera = FakeCamera(frame=b"img")
     service = ThermostatStatusService(
@@ -132,8 +146,8 @@ def test_request_status_saves_reference_capture_on_parse_failure(tmp_path: Path)
 
     try:
         service.request_status()
-        assert False, "expected ValueError"
-    except ValueError as ex:
+        assert False, "expected RuntimeError"
+    except RuntimeError as ex:
         assert "parse failed" in str(ex)
 
     saved = list((reference_dir / "runtime_parse_failure").iterdir())
@@ -144,3 +158,21 @@ def test_request_status_saves_reference_capture_on_parse_failure(tmp_path: Path)
     metadata = metadata_files[0].read_text(encoding="utf-8")
     assert "parse failed" in metadata
     assert "ValueError" in metadata
+
+
+def test_request_status_best_effort_returns_parse_failed(tmp_path: Path) -> None:
+    reference_dir = tmp_path / "references"
+    service = ThermostatStatusService(
+        camera=FakeCamera(frame=b"img"),
+        parser=FailingParser(),
+        history_file=tmp_path / "history.log",
+        reference_capture_on_parse_failure=True,
+        reference_image_store=ReferenceImageStore(reference_dir),
+    )
+
+    result = service.request_status_best_effort()
+
+    assert result.outcome == StatusAttemptOutcome.PARSE_FAILED
+    assert result.state is None
+    assert result.error_message is not None
+    assert "parse failed" in result.error_message
