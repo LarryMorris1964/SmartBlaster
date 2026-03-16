@@ -115,12 +115,18 @@ MODE_FOCUS_H = 0.55
 # This is based on overlay validation where initial boxes were aligned too low.
 TEMP_LOCAL_PERCENTILE = 0.22
 TEMP_SEGMENT_OFF_WEIGHT = 0.70
+TEMP_SEARCH_PAD_X = 0.08
+TEMP_SEARCH_PAD_Y = 0.12
 TEMP_ROI_CANDIDATES: tuple[tuple[float, float, float, float], ...] = (
     # Up-shifted candidates (visual feedback driven)
     (0.00, -0.21, 1.00, 1.00),
     (0.00, -0.20, 1.00, 0.90),
     (0.02, -0.21, 0.95, 1.00),
     (-0.01, -0.22, 1.05, 1.05),
+    # Additional right-shifted candidates from sample-driven score search.
+    (0.08, -0.21, 1.00, 1.00),
+    (0.08, -0.21, 0.95, 1.00),
+    (0.07, -0.21, 1.05, 1.00),
     # Baseline candidates retained during transition to avoid abrupt regressions.
     (0.00, 0.00, 1.00, 1.00),
     (0.15, 0.01, 1.00, 0.70),
@@ -390,12 +396,25 @@ def _draw_temperature_candidates_view(image: Image.Image) -> Image.Image:
     ]
 
     y_text = 4
-    for i, (dx, dy, sw, sh) in enumerate(TEMP_ROI_CANDIDATES):
+    static_pairs = [
+        (
+            _offset_scale_roi(DIGIT_1_ROI, dx, dy, sw, sh),
+            _offset_scale_roi(DIGIT_2_ROI, dx, dy, sw, sh),
+        )
+        for dx, dy, sw, sh in TEMP_ROI_CANDIDATES
+    ]
+
+    candidate_pairs: list[tuple[str, Rect, Rect]] = []
+    for idx, (r1, r2) in enumerate(static_pairs):
+        if _roi_is_valid(r1) and _roi_is_valid(r2):
+            candidate_pairs.append((f"c{idx}", r1, r2))
+
+    anchor_pair, anchor_quality = _estimate_temperature_digit_rois(image)
+    if anchor_pair is not None and anchor_quality > 0.0:
+        candidate_pairs.append(("a0", anchor_pair[0], anchor_pair[1]))
+
+    for i, (label_prefix, r1, r2) in enumerate(candidate_pairs):
         color = palette[i % len(palette)]
-        r1 = _offset_scale_roi(DIGIT_1_ROI, dx, dy, sw, sh)
-        r2 = _offset_scale_roi(DIGIT_2_ROI, dx, dy, sw, sh)
-        if not _roi_is_valid(r1) or not _roi_is_valid(r2):
-            continue
 
         d1, s1, _ = _decode_digit_probabilistic(image, r1)
         d2, s2, _ = _decode_digit_probabilistic(image, r2)
@@ -406,7 +425,7 @@ def _draw_temperature_candidates_view(image: Image.Image) -> Image.Image:
         x0, y0, x1, y1 = _to_box(image, r2)
         draw.rectangle((x0, y0, x1, y1), outline=color, width=2)
 
-        label = f"c{i}: {temp} ({s1:.2f},{s2:.2f})"
+        label = f"{label_prefix}: {temp} ({s1:.2f},{s2:.2f})"
         draw.text((4, y_text), label, fill=color)
         y_text += 14
 
@@ -1245,11 +1264,18 @@ def _decode_temperature(
     best_score = -1e9
     second_score = -1e9
 
+    roi_pairs: list[tuple[Rect, Rect, float]] = []
     for dx, dy, sw, sh in TEMP_ROI_CANDIDATES:
         tens_roi = _offset_scale_roi(DIGIT_1_ROI, dx, dy, sw, sh)
         ones_roi = _offset_scale_roi(DIGIT_2_ROI, dx, dy, sw, sh)
-        if not _roi_is_valid(tens_roi) or not _roi_is_valid(ones_roi):
-            continue
+        if _roi_is_valid(tens_roi) and _roi_is_valid(ones_roi):
+            roi_pairs.append((tens_roi, ones_roi, 0.0))
+
+    anchor_pair, anchor_quality = _estimate_temperature_digit_rois(image)
+    if anchor_pair is not None and anchor_quality > 0.0:
+        roi_pairs.append((anchor_pair[0], anchor_pair[1], 0.25 * anchor_quality))
+
+    for tens_roi, ones_roi, bonus in roi_pairs:
 
         tens, tens_score, tens_margin = _decode_digit_probabilistic(image, tens_roi)
         ones, ones_score, ones_margin = _decode_digit_probabilistic(image, ones_roi)
@@ -1257,6 +1283,7 @@ def _decode_temperature(
         temp = (tens * 10) + ones
         # Prioritize crisp segment matches.
         score = tens_score + ones_score + (0.25 * (tens_margin + ones_margin))
+        score += bonus
         if 10 <= temp <= 35:
             score += 0.10
         # In COOL mode, heavily prefer realistic Celsius setpoints.
@@ -1286,6 +1313,140 @@ def _decode_temperature(
     else:
         conf = min(1.0, max(0.0, (best_score - second_score) * 2.0))
     return (float(best_temp), conf)
+
+
+def _estimate_temperature_digit_rois(image: Image.Image) -> tuple[tuple[Rect, Rect] | None, float]:
+    """Estimate two digit ROIs from dark-ink activity in the temp display band."""
+    width, height = image.size
+    x0 = int(max(0, (DIGIT_1_ROI.x - TEMP_SEARCH_PAD_X) * width))
+    x1 = int(min(width, (DIGIT_2_ROI.x + DIGIT_2_ROI.w + TEMP_SEARCH_PAD_X) * width))
+    y0 = int(max(0, (DIGIT_1_ROI.y - TEMP_SEARCH_PAD_Y) * height))
+    y1 = int(min(height, (DIGIT_1_ROI.y + DIGIT_1_ROI.h + TEMP_SEARCH_PAD_Y) * height))
+    if x1 <= x0 + 12 or y1 <= y0 + 12:
+        return (None, 0.0)
+
+    band = image.crop((x0, y0, x1, y1))
+    th = _crop_percentile(band, TEMP_LOCAL_PERCENTILE)
+    px = band.load()
+    bw, bh = band.size
+
+    col_activity = [0.0] * bw
+    for xx in range(bw):
+        s = 0.0
+        for yy in range(bh):
+            if int(px[xx, yy]) <= th:
+                s += 1.0
+        col_activity[xx] = s / max(1.0, bh)
+
+    col_s = _smooth_projection(col_activity, radius=4)
+    p1 = _argmax(col_s)
+    if p1 is None:
+        return (None, 0.0)
+
+    # Suppress neighborhood around first peak then find second peak.
+    suppress = max(3, int(0.08 * bw))
+    masked = col_s[:]
+    for i in range(max(0, p1 - suppress), min(bw, p1 + suppress + 1)):
+        masked[i] = -1.0
+    p2 = _argmax(masked)
+    if p2 is None:
+        return (None, 0.0)
+
+    lx, rx = (p1, p2) if p1 < p2 else (p2, p1)
+    peak_dist = max(1, rx - lx)
+    digit_w_px = max(8.0, 0.9 * peak_dist)
+
+    # Row activity around both peaks to estimate shared digit row top/bottom.
+    xw0 = max(0, int(lx - (0.55 * digit_w_px)))
+    xw1 = min(bw, int(rx + (0.55 * digit_w_px)))
+    row_activity = [0.0] * bh
+    span_w = max(1, xw1 - xw0)
+    for yy in range(bh):
+        s = 0.0
+        for xx in range(xw0, xw1):
+            if int(px[xx, yy]) <= th:
+                s += 1.0
+        row_activity[yy] = s / span_w
+
+    row_s = _smooth_projection(row_activity, radius=3)
+    ymax = max(row_s) if row_s else 0.0
+    if ymax <= 0.0:
+        return (None, 0.0)
+    cut = 0.45 * ymax
+    ys = [i for i, v in enumerate(row_s) if v >= cut]
+    if not ys:
+        return (None, 0.0)
+    yt = max(0, min(ys))
+    yb = min(bh - 1, max(ys))
+    digit_h_px = max(10.0, float(yb - yt + 1))
+
+    # Convert pixel coordinates in band back to normalized image coordinates.
+    def to_roi(cx_px: float) -> Rect:
+        cx = (x0 + cx_px) / width
+        y = (y0 + yt) / height
+        w = digit_w_px / width
+        h = digit_h_px / height
+        x = cx - (w / 2.0)
+        return Rect(x=x, y=y, w=w, h=h)
+
+    r1 = to_roi(float(lx))
+    r2 = to_roi(float(rx))
+    if not _roi_is_valid(r1) or not _roi_is_valid(r2):
+        return (None, 0.0)
+
+    # Reject anchors that drift too far from the expected 2-digit display row.
+    overlap = (_rect_overlap_fraction(r1, DIGIT_1_ROI) + _rect_overlap_fraction(r2, DIGIT_2_ROI)) / 2.0
+    if overlap < 0.25:
+        return (None, 0.0)
+
+    # Quality based on peak prominence and row confidence.
+    baseline = 0.0
+    if col_s:
+        sorted_col = sorted(col_s)
+        mid = len(sorted_col) // 2
+        if len(sorted_col) % 2:
+            baseline = sorted_col[mid]
+        else:
+            baseline = (sorted_col[mid - 1] + sorted_col[mid]) / 2.0
+    p1v = col_s[p1]
+    p2v = col_s[p2]
+    prominence = max(0.0, ((p1v - baseline) + (p2v - baseline)) / 2.0)
+    quality = max(0.0, min(1.0, ((prominence * 2.0) + (ymax * 0.8)) * min(1.0, overlap / 0.6)))
+    return ((r1, r2), quality)
+
+
+def _argmax(values: list[float]) -> int | None:
+    if not values:
+        return None
+    best_i = 0
+    best_v = values[0]
+    for i in range(1, len(values)):
+        if values[i] > best_v:
+            best_v = values[i]
+            best_i = i
+    return best_i
+
+
+def _rect_overlap_fraction(a: Rect, b: Rect) -> float:
+    ax0 = a.x
+    ay0 = a.y
+    ax1 = a.x + a.w
+    ay1 = a.y + a.h
+    bx0 = b.x
+    by0 = b.y
+    bx1 = b.x + b.w
+    by1 = b.y + b.h
+
+    ix0 = max(ax0, bx0)
+    iy0 = max(ay0, by0)
+    ix1 = min(ax1, bx1)
+    iy1 = min(ay1, by1)
+    if ix1 <= ix0 or iy1 <= iy0:
+        return 0.0
+
+    inter = (ix1 - ix0) * (iy1 - iy0)
+    amin = min(max(1e-9, a.w * a.h), max(1e-9, b.w * b.h))
+    return max(0.0, min(1.0, inter / amin))
 
 
 def _decode_digit_probabilistic(image: Image.Image, digit_roi: Rect) -> tuple[int, float, float]:
