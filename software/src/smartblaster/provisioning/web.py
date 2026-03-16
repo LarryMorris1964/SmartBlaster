@@ -117,15 +117,28 @@ def create_provisioning_app(
         return provisioning.available_thermostats()
 
     @app.get("/api/device-info")
-    def device_info() -> dict[str, str]:
+    def device_info() -> dict[str, object]:
         setup_state = load_setup_state(provisioning.state_file)
         saved_name = setup_state.get("device_name")
         device_name = str(saved_name).strip() if isinstance(saved_name, str) and saved_name.strip() else "SmartBlaster"
+        has_camera_setup_values = any(
+            key in setup_state
+            for key in (
+                "camera_enabled",
+                "status_image_dir",
+                "reference_image_dir",
+                "reference_capture_on_parse_failure",
+                "training_mode_enabled",
+                "training_capture_interval_minutes",
+            )
+        )
         return {
             "device_name": device_name,
             "software_version": _software_version(),
             "setup_state_version": str(setup_state.get("setup_state_version", "")),
             "config_schema_version": str(setup_state.get("config_schema_version", "")),
+            "has_camera_setup_values": has_camera_setup_values,
+            "camera_enabled": bool(setup_state.get("camera_enabled", False)),
         }
 
     @app.get("/api/update/status")
@@ -348,6 +361,30 @@ def create_provisioning_app(
       .schedule-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
       .schedule-grid div { font-size: 0.92rem; }
       .meta { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+      .camera-cta { border: 2px solid var(--accent); background: linear-gradient(180deg, #f3fbf7 0%, #eef8f2 100%); }
+      .camera-cta h2 { color: #174a3b; margin-top: 0; }
+      .btn-link { display: block; background: var(--accent); color: white; font-weight: 700; cursor: pointer; width: 100%; padding: 0.7rem; margin-top: 0.25rem; border-radius: 10px; text-align: center; text-decoration: none; box-sizing: border-box; }
+      .camera-cta .btn-link { font-size: 1.05rem; font-weight: 800; padding: 0.85rem 0.9rem; }
+      #cameraLiveModal { display: none; position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,0.82); z-index: 1000; align-items: center; justify-content: center; padding: 1rem; box-sizing: border-box; }
+      #cameraLiveModal:target { display: flex; }
+      .modal-inner { background: #1a1a1a; border-radius: 16px; padding: 1rem; max-width: 900px; width: 100%; box-shadow: 0 24px 64px rgba(0,0,0,0.7); }
+      .modal-inner h2 { color: #f3efe3; margin: 0 0 0.6rem 0; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
+      .modal-inner h2 button { width: auto; padding: 0.3rem 0.9rem; font-size: 0.95rem; background: #444; border-radius: 8px; }
+      #modalPreview { width: 100%; border-radius: 10px; aspect-ratio: 16/9; object-fit: cover; background: #333; display: block; }
+      .modal-hint { color: #b0a990; font-size: 0.9rem; margin-top: 0.5rem; text-align: center; }
+      .modal-tools { display: flex; gap: 0.6rem; justify-content: center; margin-top: 0.6rem; }
+      .modal-tools button { width: auto; padding: 0.45rem 0.9rem; font-size: 0.9rem; border-radius: 8px; background: #2f6a58; }
+      .modal-diagnostics {
+        margin-top: 0.6rem;
+        background: #111;
+        border: 1px solid #3f3f3f;
+        border-radius: 8px;
+        padding: 0.55rem 0.65rem;
+        color: #d8d8d8;
+        font-size: 0.85rem;
+        line-height: 1.35;
+        white-space: pre-wrap;
+      }
       pre.doc { white-space: pre-wrap; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem; max-height: 260px; overflow: auto; }
       @media (max-width: 640px) {
         .camera-tools { grid-template-columns: 1fr; }
@@ -365,7 +402,26 @@ def create_provisioning_app(
         <div><strong>Software Version:</strong> <span id="softwareVersionDisplay">loading...</span></div>
       </div>
     </section>
+    <section class="panel camera-cta">
+      <h2>Camera Setup</h2>
+      <p id="cameraSetupCtaHint" class="hint">Run camera alignment and capture a reference image before finishing setup.</p>
+      <a id="runCameraSetupNow" href="#cameraLiveModal" class="btn-link">Run Camera Setup Now</a>
+    </section>
 
+    <div id="cameraLiveModal" role="dialog" aria-modal="true" aria-label="Camera live view">
+      <div class="modal-inner">
+        <h2>Camera Live View <button id="closeLiveView" type="button" onclick="closeCameraLiveView()">Done</button></h2>
+        <img id="modalPreview" alt="Live camera view" />
+        <p id="modalPreviewMsg" class="modal-hint" style="color:#f08080;"></p>
+        <div class="modal-tools">
+          <button id="checkReadabilityBtn" type="button">Check Readability (Advanced)</button>
+          <button id="copyDiagnosticsBtn" type="button">Copy Diagnostics</button>
+        </div>
+        <div id="modalDiagnostics" class="modal-diagnostics" style="display:none;"></div>
+        <p id="modalCopyStatus" class="modal-hint" style="display:none;"></p>
+        <p class="modal-hint">Position the device and adjust the camera zoom and focus. Press Done when the image looks good.</p>
+      </div>
+    </div>
     <section class=\"panel\">
       <h2 class="setup-title">Setup</h2>
 
@@ -609,7 +665,21 @@ def create_provisioning_app(
 
     <script>
       let previewTimer = null;
+      let hasCameraSetupValues = false;
       const WEEK_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+      function updateCameraSetupCallToAction() {
+        const button = document.getElementById('runCameraSetupNow');
+        const hint = document.getElementById('cameraSetupCtaHint');
+        if (!button || !hint) {
+          return;
+        }
+        const rerun = hasCameraSetupValues;
+        button.textContent = rerun ? 'Rerun Camera Setup' : 'Run Camera Setup Now';
+        hint.textContent = rerun
+          ? 'Camera setup values were previously saved. Run setup again after moving the device or thermostat.'
+          : 'Run camera alignment and capture a reference image before finishing setup.';
+      }
 
       async function loadDeviceInfo() {
         try {
@@ -623,8 +693,11 @@ def create_provisioning_app(
           document.getElementById('deviceName').value = deviceName;
           document.getElementById('deviceNameDisplay').textContent = deviceName;
           document.getElementById('softwareVersionDisplay').textContent = data.software_version || 'unknown';
+          hasCameraSetupValues = Boolean(data.has_camera_setup_values);
+          updateCameraSetupCallToAction();
         } catch (_err) {
           document.getElementById('softwareVersionDisplay').textContent = 'unknown';
+          updateCameraSetupCallToAction();
         }
       }
 
@@ -944,7 +1017,119 @@ def create_provisioning_app(
         const data = await res.json();
         result.className = 'ok';
         result.textContent = data.message;
+        hasCameraSetupValues = true;
+        updateCameraSetupCallToAction();
       }
+
+      let liveViewTimer = null;
+
+      function refreshLiveView() {
+        const profileId = (selectedProfileId() || 'midea_kjr_12b_dp_t');
+        const img = document.getElementById('modalPreview');
+        const url = `/api/camera/preview.jpg?thermostat_profile_id=${encodeURIComponent(profileId)}&overlay=false&t=${Date.now()}`;
+        img.onerror = () => {
+          img.onerror = null;
+          img.removeAttribute('src');
+          img.alt = 'Camera not available — check that the camera is connected.';
+          document.getElementById('modalPreviewMsg').textContent = 'Camera not available. Check that the camera is connected to the device.';
+        };
+        img.src = url;
+      }
+
+      function openCameraLiveView() {
+        window.location.hash = 'cameraLiveModal';
+      }
+
+      function closeCameraLiveView() {
+        window.location.hash = '';
+      }
+
+      async function runReadabilityCheck() {
+        const profileId = (selectedProfileId() || 'midea_kjr_12b_dp_t');
+        const output = document.getElementById('modalDiagnostics');
+        const button = document.getElementById('checkReadabilityBtn');
+        const copyStatus = document.getElementById('modalCopyStatus');
+        output.style.display = 'block';
+        output.textContent = 'Running readability check...';
+        copyStatus.style.display = 'none';
+        copyStatus.textContent = '';
+        button.disabled = true;
+        button.textContent = 'Checking...';
+
+        try {
+          const res = await fetch(`/api/camera/status?thermostat_profile_id=${encodeURIComponent(profileId)}`);
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || 'Unable to evaluate readability');
+          }
+
+          const parsed = data.parsed_summary || {};
+          const lines = [
+            `Readable: ${data.display_readable ? 'yes' : 'no'}`,
+            `Focus score: ${data.focus_score}`,
+            `Glare ratio: ${data.glare_ratio}`,
+            `Parser confidence: ${data.parser_confidence}`,
+            `Mode: ${parsed.mode ?? 'n/a'}`,
+            `Set temperature: ${parsed.set_temperature ?? 'n/a'}`,
+            `Fan speed: ${parsed.fan_speed ?? 'n/a'}`,
+          ];
+          output.textContent = lines.join('\\n');
+        } catch (err) {
+          output.textContent = `Readability check failed: ${err.message || 'Unknown error'}`;
+        } finally {
+          button.disabled = false;
+          button.textContent = 'Check Readability (Advanced)';
+        }
+      }
+
+      async function copyDiagnosticsToClipboard() {
+        const output = document.getElementById('modalDiagnostics');
+        const copyStatus = document.getElementById('modalCopyStatus');
+        const text = (output.textContent || '').trim();
+        copyStatus.style.display = 'block';
+        if (!text) {
+          copyStatus.textContent = 'Nothing to copy yet. Run readability check first.';
+          return;
+        }
+
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+          }
+          copyStatus.textContent = 'Diagnostics copied to clipboard.';
+        } catch (_err) {
+          copyStatus.textContent = 'Copy failed. Please select and copy manually.';
+        }
+      }
+
+      window.addEventListener('hashchange', function() {
+        if (window.location.hash === '#cameraLiveModal') {
+          document.getElementById('modalPreviewMsg').textContent = '';
+          const diag = document.getElementById('modalDiagnostics');
+          diag.style.display = 'none';
+          diag.textContent = '';
+          const copyStatus = document.getElementById('modalCopyStatus');
+          copyStatus.style.display = 'none';
+          copyStatus.textContent = '';
+          refreshLiveView();
+          if (!liveViewTimer) {
+            liveViewTimer = setInterval(refreshLiveView, 1000);
+          }
+        } else if (liveViewTimer) {
+          clearInterval(liveViewTimer);
+          liveViewTimer = null;
+        }
+      });
 
       document.getElementById('save').addEventListener('click', saveSetup);
       document.getElementById('runValidation').addEventListener('click', runValidation);
@@ -953,6 +1138,9 @@ def create_provisioning_app(
         if (!perDayScheduleDetails.open) propagateMonToOtherDays();
       });
       document.getElementById('disableCameraVerification').addEventListener('change', updateCameraPanel);
+      document.getElementById('checkReadabilityBtn').addEventListener('click', runReadabilityCheck);
+      document.getElementById('copyDiagnosticsBtn').addEventListener('click', copyDiagnosticsToClipboard);
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCameraLiveView(); });
       document.getElementById('deviceName').addEventListener('input', (event) => {
         const value = event.target.value || 'SmartBlaster';
         document.getElementById('deviceNameDisplay').textContent = value;
@@ -965,7 +1153,7 @@ def create_provisioning_app(
       document.getElementById('rebootNow').addEventListener('click', rebootDevice);
       loadDeviceInfo();
       loadDoc('/api/readme', 'readmeText', 'Setup guide unavailable.');
-      loadDoc('/api/owners-manual', 'ownersManualText', 'Owner\'s manual unavailable.');
+      loadDoc('/api/owners-manual', 'ownersManualText', "Owner's manual unavailable.");
       loadUpdateStatus();
       loadProfiles();
     </script>
