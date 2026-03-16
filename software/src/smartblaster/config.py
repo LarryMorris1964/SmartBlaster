@@ -41,6 +41,7 @@ class RuntimeConfig:
     reference_offload_interval_minutes: int = 15
     reference_offload_batch_size: int = 25
     config_schema_version: int = 1
+    activity_log_file: str = "data/activity_log.jsonl"
 
 
 
@@ -87,4 +88,5 @@ def from_env() -> RuntimeConfig:
         reference_offload_interval_minutes=int(os.getenv("SMARTBLASTER_REFERENCE_OFFLOAD_INTERVAL_MINUTES", "15")),
         reference_offload_batch_size=int(os.getenv("SMARTBLASTER_REFERENCE_OFFLOAD_BATCH_SIZE", "25")),
         config_schema_version=int(os.getenv("SMARTBLASTER_CONFIG_SCHEMA_VERSION", "1")),
+        activity_log_file=os.getenv("SMARTBLASTER_ACTIVITY_LOG_FILE", "data/activity_log.jsonl"),
     )

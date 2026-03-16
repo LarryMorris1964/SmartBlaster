@@ -46,6 +46,21 @@ Goals:
 Notes:
 - Start with architecture and interface contracts before implementation.
 
+### 4. Rich Logging and Diagnostics
+
+Status: In progress — core infrastructure complete; integration points to grow
+
+Goals:
+- Emit structured JSON activity records for all key interactions: IR commands sent, camera verification results, scheduling events, async events (solar/inverter), and home automation API commands.
+- Write records to a rotating JSONL file (`data/activity_log.jsonl` by default, configurable via `SMARTBLASTER_ACTIVITY_LOG_FILE`).
+- Use `structlog` over stdlib `logging`; capture logs in tests via `structlog.testing.capture_logs()`.
+- Wire `home_automation_command` calls into future IFTTT/Alexa/HomeKit integration layer as it is built.
+- Add `ir_command_verified` / `ir_command_verification_failed` call sites once the setup validation workflow (item 2) is implemented.
+
+Notes:
+- `ActivityLogger` is fully injectable — pass a custom instance in tests, or let runtime create one from config.
+- `configure_logging()` is called once by `SmartBlasterRuntime.from_env()` at startup.
+
 ## Completed
 
 - None yet.

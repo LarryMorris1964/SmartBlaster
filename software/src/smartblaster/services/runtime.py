@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from smartblaster.config import from_env
+from smartblaster.services.activity_log import ActivityLogger, configure_logging
 from smartblaster.control.state_machine import HvacStateMachine
 from smartblaster.events.sources import CompositeEventSource, DailyTimeEventSource, EventSource
 from smartblaster.hardware.camera import CameraService, NoCameraService
@@ -43,6 +44,7 @@ class SmartBlasterRuntime:
         swing_mode: MideaSwing = MideaSwing.OFF,
         preset_mode: MideaPreset = MideaPreset.NONE,
         thermostat_temperature_unit: str = "C",
+        activity_log: ActivityLogger | None = None,
     ) -> None:
         self.loop_interval_ms = loop_interval_ms
         self.target_temperature_c = target_temperature_c
@@ -59,6 +61,8 @@ class SmartBlasterRuntime:
         self.reference_image_store = reference_image_store
         self.thermostat_profile_id = thermostat_profile_id
         self.state_machine = HvacStateMachine()
+        self._act_log = activity_log if activity_log is not None else ActivityLogger()
+        self._dry_run: bool = getattr(ir, "dry_run", False)
 
     @classmethod
     def from_env(cls) -> "SmartBlasterRuntime":
@@ -111,6 +115,12 @@ class SmartBlasterRuntime:
                     batch_size=cfg.reference_offload_batch_size,
                 )
 
+        configure_logging(
+            log_level=cfg.log_level,
+            activity_log_file=Path(cfg.activity_log_file),
+        )
+        act_log = ActivityLogger(device_name=cfg.device_name)
+
         return cls(
             loop_interval_ms=cfg.loop_interval_ms,
             target_temperature_c=cfg.target_temperature_c,
@@ -118,6 +128,7 @@ class SmartBlasterRuntime:
             swing_mode=MideaSwing(cfg.swing_mode),
             preset_mode=MideaPreset(cfg.preset_mode),
             thermostat_temperature_unit=cfg.thermostat_temperature_unit,
+            activity_log=act_log,
             ir=ir,
             camera=camera,
             event_source=event_source,
@@ -142,11 +153,14 @@ class SmartBlasterRuntime:
             raise RuntimeError("camera status request unavailable: camera is disabled")
         return self.status_service.request_status()
 
-    def _apply_event(self, event: str, *, last_state: str) -> str:
+    def _apply_event(self, event: str, *, last_state: str, source: str = "event_source") -> str:
+        self._act_log.schedule_event(trigger=event, source=source)
         new_state = self.state_machine.handle_event(event)
-        print(f"state={new_state}")
 
         if new_state != last_state:
+            self._act_log.state_changed(
+                from_state=last_state, to_state=new_state, trigger=event
+            )
             command = self.state_machine.build_command(
                 target_temperature_c=self._target_setpoint_c_for_thermostat(),
                 fan=self.fan_mode,
@@ -156,13 +170,12 @@ class SmartBlasterRuntime:
             command_name = _command_name_for_event(event, command.mode)
             policy = get_command_policy(self.thermostat_profile_id, command_name)
             request_id = self.ir.send_midea_command(command)
-            print(
-                "sent midea command "
-                f"request_id={request_id} "
-                f"name={command_name} "
-                f"criticality={policy.criticality.value} "
-                f"max_attempts={policy.max_attempts} "
-                f"retry_wait_s={policy.retry_wait_seconds}"
+            self._act_log.ir_command_sent(
+                request_id=request_id,
+                command_name=command_name,
+                criticality=policy.criticality.value,
+                max_attempts=policy.max_attempts,
+                dry_run=self._dry_run,
             )
 
         return new_state
@@ -171,6 +184,11 @@ class SmartBlasterRuntime:
         if not _network_connected_for_runtime():
             raise RuntimeNetworkUnavailable("runtime network unavailable")
 
+        self._act_log.runtime_started(
+            profile_id=self.thermostat_profile_id,
+            camera_enabled=self.camera is not None,
+            dry_run=self._dry_run,
+        )
         self.camera.start()
         last_state = self.state_machine.state
         last_offload_monotonic = time.monotonic()
@@ -178,11 +196,15 @@ class SmartBlasterRuntime:
             while True:
                 scheduled_event = self.event_source.poll()
                 if scheduled_event:
-                    last_state = self._apply_event(scheduled_event, last_state=last_state)
+                    last_state = self._apply_event(
+                        scheduled_event, last_state=last_state, source="daily_schedule"
+                    )
 
                 external_event = self.ir.listen()
                 if external_event:
-                    last_state = self._apply_event(external_event, last_state=last_state)
+                    last_state = self._apply_event(
+                        external_event, last_state=last_state, source="ir_receive"
+                    )
 
                 if self.reference_offload_service is not None:
                     now = time.monotonic()
@@ -190,17 +212,16 @@ class SmartBlasterRuntime:
                     if (now - last_offload_monotonic) >= interval_s:
                         result = self.reference_offload_service.run_once()
                         if result.scanned > 0:
-                            print(
-                                "reference_offload "
-                                f"scanned={result.scanned} "
-                                f"offloaded={result.offloaded} "
-                                f"failed={result.failed}"
+                            self._act_log.reference_offload_run(
+                                scanned=result.scanned,
+                                offloaded=result.offloaded,
+                                failed=result.failed,
                             )
                         last_offload_monotonic = now
 
                 time.sleep(self.loop_interval_ms / 1000)
         except KeyboardInterrupt:
-            print("Stopping SmartBlaster runtime")
+            self._act_log.runtime_stopped(reason="keyboard_interrupt")
         finally:
             self.camera.stop()
 
