@@ -43,10 +43,18 @@ smartblaster-cli vision-debug-overlays \
 
 For each input image, this writes:
 
-- stem.landmarks_original.png: original image with detected landmark anchors and boundary estimate.
+- stem.original_bounds.png: original image with detected display boundary estimate.
 - stem.rois_selected.png: parser ROI boxes on the chosen normalized candidate.
-- stem.rois_landmarks.png: parser ROI boxes on landmark-based normalization (when available).
 - stem.rois_bounds.png: parser ROI boxes on boundary-based normalization (when available).
 - stem.rois_identity.png: parser ROI boxes on plain resize fallback (when selected differs).
+- stem.digits_global_segments.png: digit ROI + segment activation using global threshold.
+- stem.digits_local_segments.png: digit ROI + segment activation using local digit threshold.
+- stem.temp_candidates.png: candidate digit ROI boxes and predicted temperatures.
 
 By default, helper files ending in _rois are skipped. Add --include-auxiliary-images to include them.
+
+## Known Workaround
+
+- WORKAROUND: `set_temp` is currently derived from `follow_me` in the parser.
+- Why: the `set_temp` glyph is low-contrast/noisy in current sample images and is not yet reliable as a direct detection target.
+- TODO: replace this workaround with direct `set_temp` detection once a stable detector is implemented and validated.

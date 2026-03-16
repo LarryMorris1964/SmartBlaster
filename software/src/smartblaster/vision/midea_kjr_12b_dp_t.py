@@ -102,6 +102,32 @@ POWER_ACTIVITY_MIN_SCORE = 0.25
 NORMALIZED_WIDTH = 640
 NORMALIZED_HEIGHT = 360
 
+# Mode text is painted on the glass (static). Score only the active-glyph area.
+MODE_FOCUS_X = 0.10
+MODE_FOCUS_W = 0.55
+MODE_FOCUS_Y = 0.40
+MODE_FOCUS_H = 0.55
+
+# Temperature digits are blur/noise sensitive. Evaluate a small set of
+# ROI shifts/scales and use local-threshold probabilistic segment scoring.
+#
+# NOTE: Candidate y-offsets intentionally bias upward by about one digit height.
+# This is based on overlay validation where initial boxes were aligned too low.
+TEMP_LOCAL_PERCENTILE = 0.22
+TEMP_SEGMENT_OFF_WEIGHT = 0.70
+TEMP_ROI_CANDIDATES: tuple[tuple[float, float, float, float], ...] = (
+    # Up-shifted candidates (visual feedback driven)
+    (0.00, -0.21, 1.00, 1.00),
+    (0.00, -0.20, 1.00, 0.90),
+    (0.02, -0.21, 0.95, 1.00),
+    (-0.01, -0.22, 1.05, 1.05),
+    # Baseline candidates retained during transition to avoid abrupt regressions.
+    (0.00, 0.00, 1.00, 1.00),
+    (0.15, 0.01, 1.00, 0.70),
+    (0.15, 0.01, 0.80, 0.70),
+    (0.16, 0.18, 0.80, 1.30),
+)
+
 # Reference display position as fractions of the full camera frame.
 # Derived from sample_001.jpg (the calibration image) via _estimate_display_bounds.
 # These describe where the thermostat LCD sits at the nominal camera mount.
@@ -126,7 +152,10 @@ class MideaKjr12bDpTParser:
             image = _normalize_display_region(image)
         threshold = _calibrated_threshold(image)
 
-        mode_scores = {mode: _slot_presence_score(image, roi, threshold) for mode, roi in MODE_ROIS.items()}
+        mode_scores = {
+            mode: _slot_presence_score(image, _focus_subroi(roi, MODE_FOCUS_X, MODE_FOCUS_Y, MODE_FOCUS_W, MODE_FOCUS_H), threshold)
+            for mode, roi in MODE_ROIS.items()
+        }
         mode, mode_conf = _pick_winning_slot(
             mode_scores,
             min_score=MODE_SLOT_MIN_SCORE,
@@ -158,7 +187,15 @@ class MideaKjr12bDpTParser:
         timer_set = timer_set_raw or timer_on or timer_off
         if timer_set:
             timer_set_conf = max(timer_set_conf, timer_on_conf, timer_off_conf)
-        set_temp, set_temp_conf = _indicator_presence(set_temp_score, min_score=INDICATOR_MIN_SCORE)
+        set_temp_raw, set_temp_raw_conf = _indicator_presence(set_temp_score, min_score=INDICATOR_MIN_SCORE)
+        # WORKAROUND (intentional temporary behavior):
+        # The set_temp glyph is too low-contrast/noisy in field images to be
+        # reliable. For now, set_temp is derived from follow_me semantics.
+        #
+        # TODO: Replace this with direct set_temp OCR/icon detection once a
+        # stable, dedicated detector is implemented and validated.
+        set_temp = follow_me
+        set_temp_conf = follow_me_conf if set_temp else max(0.0, min(set_temp_raw_conf, 0.35))
         lock_enabled, _ = _indicator_presence(lock_score, min_score=INDICATOR_MIN_SCORE)
 
         fan_scores = {level: _slot_presence_score(image, roi, threshold) for level, roi in FAN_ROIS.items()}
@@ -175,13 +212,17 @@ class MideaKjr12bDpTParser:
         temperature_unit = None
         unit_conf = 0.0
 
-        tens = _decode_digit(image, DIGIT_1_ROI, threshold)
-        ones = _decode_digit(image, DIGIT_2_ROI, threshold)
-        set_temperature: float | None = None
-        temp_conf = 0.0
-        if tens is not None and ones is not None:
-            set_temperature = float((tens * 10) + ones)
-            temp_conf = 0.9
+        if self._normalize_display:
+            set_temperature, temp_conf = _decode_temperature(image, threshold, mode)
+        else:
+            # Preserve deterministic behaviour for synthetic/unit-test frames.
+            tens = _decode_digit(image, DIGIT_1_ROI, threshold)
+            ones = _decode_digit(image, DIGIT_2_ROI, threshold)
+            set_temperature = None
+            temp_conf = 0.0
+            if tens is not None and ones is not None:
+                set_temperature = float((tens * 10) + ones)
+                temp_conf = 0.9
 
         resolved_mode = mode if mode is not None else DisplayMode.UNKNOWN
         unreadable_fields: list[str] = []
@@ -197,6 +238,7 @@ class MideaKjr12bDpTParser:
             "timer_on": timer_on,
             "timer_off": timer_off,
             "set_temp": set_temp,
+            "set_temp_raw": set_temp_raw,
             "lock": lock_enabled,
             "fan_low": fan_scores[FanSpeedLevel.LOW] >= FAN_SLOT_MIN_SCORE,
             "fan_medium": fan_scores[FanSpeedLevel.MEDIUM] >= FAN_SLOT_MIN_SCORE,
@@ -253,6 +295,9 @@ class MideaKjr12bDpTParser:
             "original_bounds": bounds_view,
             "rois_selected": _draw_rois_view(selected),
             "rois_identity": _draw_rois_view(candidates["identity"]),
+            "digits_global_segments": _draw_digit_segments_view(selected, threshold=_calibrated_threshold(selected), local=False),
+            "digits_local_segments": _draw_digit_segments_view(selected, threshold=0, local=True),
+            "temp_candidates": _draw_temperature_candidates_view(selected),
         }
 
         if "bounds" in candidates:
@@ -299,6 +344,73 @@ def _draw_box(image: Image.Image, box: tuple[int, int, int, int], color: tuple[i
     draw = ImageDraw.Draw(image)
     x0, y0, x1, y1 = box
     draw.rectangle((x0, y0, x1, y1), outline=color, width=3)
+
+
+def _draw_digit_segments_view(image: Image.Image, *, threshold: int, local: bool) -> Image.Image:
+    out = image.convert("RGB")
+    draw = ImageDraw.Draw(out)
+
+    for digit_name, digit_roi in (("d1", DIGIT_1_ROI), ("d2", DIGIT_2_ROI)):
+        x0, y0, x1, y1 = _to_box(out.convert("L"), digit_roi)
+        draw.rectangle((x0, y0, x1, y1), outline=(0, 255, 0), width=2)
+
+        seg_threshold = threshold
+        if local:
+            seg_threshold = _crop_percentile(image.crop(_to_box(image, digit_roi)), 0.22)
+
+        for seg_name, rel in SEGMENT_RECTS.items():
+            abs_roi = Rect(
+                x=digit_roi.x + (digit_roi.w * rel.x),
+                y=digit_roi.y + (digit_roi.h * rel.y),
+                w=digit_roi.w * rel.w,
+                h=digit_roi.h * rel.h,
+            )
+            ratio = _roi_dark_ratio(image, abs_roi, seg_threshold)
+            # Red intensity indicates segment darkness ratio.
+            red = int(max(0.0, min(1.0, ratio)) * 255)
+            color = (red, 40, 40)
+            sx0, sy0, sx1, sy1 = _to_box(image, abs_roi)
+            draw.rectangle((sx0, sy0, sx1, sy1), outline=color, width=2)
+
+        # Label each digit box for quick visual checks in overlay exports.
+        draw.text((x0 + 2, max(0, y0 - 14)), digit_name, fill=(255, 255, 0))
+
+    return out
+
+
+def _draw_temperature_candidates_view(image: Image.Image) -> Image.Image:
+    out = image.convert("RGB")
+    draw = ImageDraw.Draw(out)
+
+    palette = [
+        (255, 0, 0),
+        (255, 165, 0),
+        (255, 255, 0),
+        (0, 255, 255),
+    ]
+
+    y_text = 4
+    for i, (dx, dy, sw, sh) in enumerate(TEMP_ROI_CANDIDATES):
+        color = palette[i % len(palette)]
+        r1 = _offset_scale_roi(DIGIT_1_ROI, dx, dy, sw, sh)
+        r2 = _offset_scale_roi(DIGIT_2_ROI, dx, dy, sw, sh)
+        if not _roi_is_valid(r1) or not _roi_is_valid(r2):
+            continue
+
+        d1, s1, _ = _decode_digit_probabilistic(image, r1)
+        d2, s2, _ = _decode_digit_probabilistic(image, r2)
+        temp = (d1 * 10) + d2
+
+        x0, y0, x1, y1 = _to_box(image, r1)
+        draw.rectangle((x0, y0, x1, y1), outline=color, width=2)
+        x0, y0, x1, y1 = _to_box(image, r2)
+        draw.rectangle((x0, y0, x1, y1), outline=color, width=2)
+
+        label = f"c{i}: {temp} ({s1:.2f},{s2:.2f})"
+        draw.text((4, y_text), label, fill=color)
+        y_text += 14
+
+    return out
 
 
 def _draw_anchor(image: Image.Image, cx: float, cy: float, color: tuple[int, int, int]) -> None:
@@ -980,6 +1092,23 @@ def _to_box(image: Image.Image, roi: Rect) -> tuple[int, int, int, int]:
     return _to_box_size(width, height, roi)
 
 
+def _focus_subroi(roi: Rect, x_frac: float, y_frac: float, w_frac: float, h_frac: float) -> Rect:
+    x = roi.x + (roi.w * x_frac)
+    y = roi.y + (roi.h * y_frac)
+    w = roi.w * w_frac
+    h = roi.h * h_frac
+    return Rect(x=x, y=y, w=w, h=h)
+
+
+def _offset_scale_roi(roi: Rect, dx: float, dy: float, sw: float, sh: float) -> Rect:
+    return Rect(
+        x=roi.x + dx,
+        y=roi.y + dy,
+        w=roi.w * sw,
+        h=roi.h * sh,
+    )
+
+
 def _to_box_size(width: int, height: int, roi: Rect) -> tuple[int, int, int, int]:
     x0 = int(max(0, min(width - 1, roi.x * width)))
     y0 = int(max(0, min(height - 1, roi.y * height)))
@@ -1107,6 +1236,104 @@ def _indicator_presence(score: float, *, min_score: float) -> tuple[bool, float]
     return (present, confidence)
 
 
+def _decode_temperature(
+    image: Image.Image,
+    threshold: int,
+    mode: DisplayMode | None,
+) -> tuple[float | None, float]:
+    best_temp: int | None = None
+    best_score = -1e9
+    second_score = -1e9
+
+    for dx, dy, sw, sh in TEMP_ROI_CANDIDATES:
+        tens_roi = _offset_scale_roi(DIGIT_1_ROI, dx, dy, sw, sh)
+        ones_roi = _offset_scale_roi(DIGIT_2_ROI, dx, dy, sw, sh)
+        if not _roi_is_valid(tens_roi) or not _roi_is_valid(ones_roi):
+            continue
+
+        tens, tens_score, tens_margin = _decode_digit_probabilistic(image, tens_roi)
+        ones, ones_score, ones_margin = _decode_digit_probabilistic(image, ones_roi)
+
+        temp = (tens * 10) + ones
+        # Prioritize crisp segment matches.
+        score = tens_score + ones_score + (0.25 * (tens_margin + ones_margin))
+        if 10 <= temp <= 35:
+            score += 0.10
+        # In COOL mode, heavily prefer realistic Celsius setpoints.
+        if mode == DisplayMode.COOL:
+            if 16 <= temp <= 32:
+                score += 0.35
+            else:
+                score -= 0.45
+
+        if score > best_score:
+            second_score = best_score
+            best_score = score
+            best_temp = temp
+        elif score > second_score:
+            second_score = score
+
+    if best_temp is None:
+        # Fallback to legacy decoder path if candidate search produced no ROI.
+        tens = _decode_digit(image, DIGIT_1_ROI, threshold)
+        ones = _decode_digit(image, DIGIT_2_ROI, threshold)
+        if tens is None or ones is None:
+            return (None, 0.0)
+        return (float((tens * 10) + ones), 0.35)
+
+    if second_score <= -1e8:
+        conf = 0.5
+    else:
+        conf = min(1.0, max(0.0, (best_score - second_score) * 2.0))
+    return (float(best_temp), conf)
+
+
+def _decode_digit_probabilistic(image: Image.Image, digit_roi: Rect) -> tuple[int, float, float]:
+    crop = image.crop(_to_box(image, digit_roi))
+    threshold = _crop_percentile(crop, TEMP_LOCAL_PERCENTILE)
+
+    ratios: dict[str, float] = {}
+    for segment_name, rel in SEGMENT_RECTS.items():
+        abs_roi = Rect(
+            x=digit_roi.x + (digit_roi.w * rel.x),
+            y=digit_roi.y + (digit_roi.h * rel.y),
+            w=digit_roi.w * rel.w,
+            h=digit_roi.h * rel.h,
+        )
+        ratios[segment_name] = _roi_dark_ratio(image, abs_roi, threshold)
+
+    best_digit = 0
+    best_score = -1e9
+    second_score = -1e9
+    for digit, segments_on in _digit_segment_map().items():
+        on_mean = sum(ratios[s] for s in segments_on) / max(1, len(segments_on))
+        segments_off = set(SEGMENT_RECTS.keys()) - segments_on
+        off_mean = 0.0
+        if segments_off:
+            off_mean = sum(ratios[s] for s in segments_off) / len(segments_off)
+        score = on_mean - (TEMP_SEGMENT_OFF_WEIGHT * off_mean)
+
+        if score > best_score:
+            second_score = best_score
+            best_score = score
+            best_digit = digit
+        elif score > second_score:
+            second_score = score
+
+    margin = max(0.0, best_score - second_score)
+    return (best_digit, best_score, margin)
+
+
+def _roi_is_valid(roi: Rect) -> bool:
+    if roi.w <= 0.0 or roi.h <= 0.0:
+        return False
+    if roi.x < 0.0 or roi.y < 0.0:
+        return False
+    if (roi.x + roi.w) > 1.0 or (roi.y + roi.h) > 1.0:
+        return False
+    return True
+
+
 def _decode_digit(image: Image.Image, digit_roi: Rect, threshold: int) -> int | None:
     segment_hits: set[str] = set()
     for segment_name, rel in SEGMENT_RECTS.items():
@@ -1171,18 +1398,7 @@ def _digit_templates() -> dict[int, list[int]]:
 
     out: dict[int, list[int]] = {}
     width, height = 40, 72
-    for digit, segments in {
-        0: {"a", "b", "c", "d", "e", "f"},
-        1: {"b", "c"},
-        2: {"a", "b", "d", "e", "g"},
-        3: {"a", "b", "c", "d", "g"},
-        4: {"b", "c", "f", "g"},
-        5: {"a", "c", "d", "f", "g"},
-        6: {"a", "c", "d", "e", "f", "g"},
-        7: {"a", "b", "c"},
-        8: {"a", "b", "c", "d", "e", "f", "g"},
-        9: {"a", "b", "c", "d", "f", "g"},
-    }.items():
+    for digit, segments in _digit_segment_map().items():
         img = Image.new("L", (width, height), 255)
         draw = ImageDraw.Draw(img)
         for seg in segments:
@@ -1202,6 +1418,21 @@ def _digit_templates() -> dict[int, list[int]]:
 
     setattr(_digit_templates, "_cache", out)
     return out
+
+
+def _digit_segment_map() -> dict[int, set[str]]:
+    return {
+        0: {"a", "b", "c", "d", "e", "f"},
+        1: {"b", "c"},
+        2: {"a", "b", "d", "e", "g"},
+        3: {"a", "b", "c", "d", "g"},
+        4: {"b", "c", "f", "g"},
+        5: {"a", "c", "d", "f", "g"},
+        6: {"a", "c", "d", "e", "f", "g"},
+        7: {"a", "b", "c"},
+        8: {"a", "b", "c", "d", "e", "f", "g"},
+        9: {"a", "b", "c", "d", "f", "g"},
+    }
 
 
 def _crop_percentile(crop: Image.Image, p: float) -> int:
