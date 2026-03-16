@@ -40,6 +40,9 @@ class SetupRequest:
     training_mode_enabled: bool = False
     training_capture_interval_minutes: int = 60
     validate_capabilities_enabled: bool = False
+    reference_offload_enabled: bool = False
+    reference_offload_interval_minutes: int = 15
+    reference_offload_batch_size: int = 25
     config_schema_version: int = 1
 
 
@@ -124,6 +127,10 @@ class ProvisioningService:
             raise ValueError("reference_image_dir is required")
         if request.training_capture_interval_minutes < 1:
             raise ValueError("training_capture_interval_minutes must be >= 1")
+        if request.reference_offload_interval_minutes < 1:
+            raise ValueError("reference_offload_interval_minutes must be >= 1")
+        if request.reference_offload_batch_size < 1:
+            raise ValueError("reference_offload_batch_size must be >= 1")
         if request.config_schema_version < 1:
             raise ValueError("config_schema_version must be >= 1")
 
@@ -172,6 +179,9 @@ class ProvisioningService:
             "training_mode_enabled": request.training_mode_enabled,
             "training_capture_interval_minutes": request.training_capture_interval_minutes,
             "validate_capabilities_enabled": request.validate_capabilities_enabled,
+            "reference_offload_enabled": request.reference_offload_enabled,
+            "reference_offload_interval_minutes": request.reference_offload_interval_minutes,
+            "reference_offload_batch_size": request.reference_offload_batch_size,
             "config_schema_version": request.config_schema_version,
         }
         tmp_file = self.state_file.with_suffix(f"{self.state_file.suffix}.tmp")

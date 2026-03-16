@@ -182,6 +182,10 @@ Offload readiness:
 - each capture metadata file tracks offload state (`pending` / `offloaded`), attempt counts, and optional remote IDs
 - this is intended to support future periodic upload/offload to a central server without changing on-device capture format
 
+Offload skeleton (future work item):
+- runtime includes a disabled-by-default offload worker scaffold that drains pending captures FIFO in batches
+- current transport is a no-op placeholder; real server transport/auth/retry policy is still future work
+
 Current lifecycle hook:
 - runtime parse failures can automatically save the failed source image, overlay, and error context into the reference-image store
 

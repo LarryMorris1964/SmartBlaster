@@ -11,6 +11,8 @@ from smartblaster.events.sources import CompositeEventSource, DailyTimeEventSour
 from smartblaster.hardware.camera import CameraService, NoCameraService
 from smartblaster.hardware.ir import IrService
 from smartblaster.ir.command import MideaFan, MideaPreset, MideaSwing
+from smartblaster.services.reference_images import ReferenceImageStore
+from smartblaster.services.reference_offload import NoopReferenceOffloadTransport, ReferenceOffloadService
 from smartblaster.services.thermostat_status import ThermostatStatusService
 from smartblaster.temperature import quantize_program_setpoint_for_thermostat, thermostat_to_program_celsius
 from smartblaster.thermostats.library import get_profile
@@ -28,6 +30,8 @@ class SmartBlasterRuntime:
         camera: CameraService,
         event_source: EventSource,
         status_service: ThermostatStatusService | None = None,
+        reference_offload_service: ReferenceOffloadService | None = None,
+        reference_offload_interval_minutes: int = 15,
         fan_mode: MideaFan = MideaFan.AUTO,
         swing_mode: MideaSwing = MideaSwing.OFF,
         preset_mode: MideaPreset = MideaPreset.NONE,
@@ -43,6 +47,8 @@ class SmartBlasterRuntime:
         self.camera = camera
         self.event_source = event_source
         self.status_service = status_service
+        self.reference_offload_service = reference_offload_service
+        self.reference_offload_interval_minutes = max(1, int(reference_offload_interval_minutes))
         self.state_machine = HvacStateMachine()
 
     @classmethod
@@ -74,6 +80,7 @@ class SmartBlasterRuntime:
         )
 
         status_service: ThermostatStatusService | None = None
+        reference_offload_service: ReferenceOffloadService | None = None
         if cfg.camera_enabled:
             status_service = ThermostatStatusService(
                 camera=camera,
@@ -85,6 +92,12 @@ class SmartBlasterRuntime:
                 reference_image_dir=Path(cfg.reference_image_dir),
                 manage_camera_lifecycle=False,
             )
+            if cfg.reference_offload_enabled:
+                reference_offload_service = ReferenceOffloadService(
+                    store=ReferenceImageStore(Path(cfg.reference_image_dir)),
+                    transport=NoopReferenceOffloadTransport(),
+                    batch_size=cfg.reference_offload_batch_size,
+                )
 
         return cls(
             loop_interval_ms=cfg.loop_interval_ms,
@@ -97,6 +110,8 @@ class SmartBlasterRuntime:
             camera=camera,
             event_source=event_source,
             status_service=status_service,
+            reference_offload_service=reference_offload_service,
+            reference_offload_interval_minutes=cfg.reference_offload_interval_minutes,
         )
 
     def _target_setpoint_c_for_thermostat(self) -> float:
@@ -132,6 +147,7 @@ class SmartBlasterRuntime:
     def run_forever(self) -> None:
         self.camera.start()
         last_state = self.state_machine.state
+        last_offload_monotonic = time.monotonic()
         try:
             while True:
                 scheduled_event = self.event_source.poll()
@@ -141,6 +157,20 @@ class SmartBlasterRuntime:
                 external_event = self.ir.listen()
                 if external_event:
                     last_state = self._apply_event(external_event, last_state=last_state)
+
+                if self.reference_offload_service is not None:
+                    now = time.monotonic()
+                    interval_s = self.reference_offload_interval_minutes * 60
+                    if (now - last_offload_monotonic) >= interval_s:
+                        result = self.reference_offload_service.run_once()
+                        if result.scanned > 0:
+                            print(
+                                "reference_offload "
+                                f"scanned={result.scanned} "
+                                f"offloaded={result.offloaded} "
+                                f"failed={result.failed}"
+                            )
+                        last_offload_monotonic = now
 
                 time.sleep(self.loop_interval_ms / 1000)
         except KeyboardInterrupt:

@@ -151,6 +151,27 @@ def _apply_setup_state_to_env(setup: dict[str, object]) -> None:
             "true" if validate_capabilities_enabled else "false",
         )
 
+    reference_offload_enabled = setup.get("reference_offload_enabled")
+    if isinstance(reference_offload_enabled, bool):
+        os.environ.setdefault(
+            "SMARTBLASTER_REFERENCE_OFFLOAD_ENABLED",
+            "true" if reference_offload_enabled else "false",
+        )
+
+    reference_offload_interval_minutes = setup.get("reference_offload_interval_minutes")
+    if isinstance(reference_offload_interval_minutes, int) and reference_offload_interval_minutes >= 1:
+        os.environ.setdefault(
+            "SMARTBLASTER_REFERENCE_OFFLOAD_INTERVAL_MINUTES",
+            str(reference_offload_interval_minutes),
+        )
+
+    reference_offload_batch_size = setup.get("reference_offload_batch_size")
+    if isinstance(reference_offload_batch_size, int) and reference_offload_batch_size >= 1:
+        os.environ.setdefault(
+            "SMARTBLASTER_REFERENCE_OFFLOAD_BATCH_SIZE",
+            str(reference_offload_batch_size),
+        )
+
     config_schema_version = setup.get("config_schema_version")
     if isinstance(config_schema_version, int) and config_schema_version >= 1:
         os.environ.setdefault("SMARTBLASTER_CONFIG_SCHEMA_VERSION", str(config_schema_version))

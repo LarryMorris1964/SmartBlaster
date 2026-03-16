@@ -43,6 +43,9 @@ class SetupPayload(BaseModel):
   training_mode_enabled: bool = False
   training_capture_interval_minutes: int = Field(default=60, ge=1)
   validate_capabilities_enabled: bool = False
+  reference_offload_enabled: bool = False
+  reference_offload_interval_minutes: int = Field(default=15, ge=1)
+  reference_offload_batch_size: int = Field(default=25, ge=1)
   config_schema_version: int = Field(default=1, ge=1)
 
 
@@ -103,6 +106,9 @@ def create_provisioning_app(
                     training_mode_enabled=payload.training_mode_enabled,
                     training_capture_interval_minutes=payload.training_capture_interval_minutes,
                     validate_capabilities_enabled=payload.validate_capabilities_enabled,
+                    reference_offload_enabled=payload.reference_offload_enabled,
+                    reference_offload_interval_minutes=payload.reference_offload_interval_minutes,
+                    reference_offload_batch_size=payload.reference_offload_batch_size,
                     config_schema_version=payload.config_schema_version,
                 )
             )
@@ -281,6 +287,14 @@ def create_provisioning_app(
 
       <label><input id="validateCapabilitiesEnabled" type="checkbox" /> Validate capabilities by cycling thermostat settings</label>
 
+      <label><input id="referenceOffloadEnabled" type="checkbox" /> Future: enable periodic reference offload worker</label>
+
+      <label>Offload Interval (minutes)</label>
+      <input id="referenceOffloadIntervalMinutes" type="number" min="1" step="1" value="15" />
+
+      <label>Offload Batch Size</label>
+      <input id="referenceOffloadBatchSize" type="number" min="1" step="1" value="25" />
+
       <button id=\"save\">Save Setup</button>
       <p id=\"result\" class=\"hint\"></p>
     </section>
@@ -432,6 +446,9 @@ def create_provisioning_app(
           training_mode_enabled: document.getElementById('trainingModeEnabled').checked,
           training_capture_interval_minutes: parseInt(document.getElementById('trainingCaptureIntervalMinutes').value || '60', 10),
           validate_capabilities_enabled: document.getElementById('validateCapabilitiesEnabled').checked,
+          reference_offload_enabled: document.getElementById('referenceOffloadEnabled').checked,
+          reference_offload_interval_minutes: parseInt(document.getElementById('referenceOffloadIntervalMinutes').value || '15', 10),
+          reference_offload_batch_size: parseInt(document.getElementById('referenceOffloadBatchSize').value || '25', 10),
           config_schema_version: 1,
         };
 

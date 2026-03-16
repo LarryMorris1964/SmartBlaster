@@ -36,6 +36,9 @@ class RuntimeConfig:
     training_mode_enabled: bool = False
     training_capture_interval_minutes: int = 60
     validate_capabilities_enabled: bool = False
+    reference_offload_enabled: bool = False
+    reference_offload_interval_minutes: int = 15
+    reference_offload_batch_size: int = 25
     config_schema_version: int = 1
 
 
@@ -78,5 +81,8 @@ def from_env() -> RuntimeConfig:
         training_mode_enabled=_env_bool("SMARTBLASTER_TRAINING_MODE_ENABLED", False),
         training_capture_interval_minutes=int(os.getenv("SMARTBLASTER_TRAINING_CAPTURE_INTERVAL_MINUTES", "60")),
         validate_capabilities_enabled=_env_bool("SMARTBLASTER_VALIDATE_CAPABILITIES_ENABLED", False),
+        reference_offload_enabled=_env_bool("SMARTBLASTER_REFERENCE_OFFLOAD_ENABLED", False),
+        reference_offload_interval_minutes=int(os.getenv("SMARTBLASTER_REFERENCE_OFFLOAD_INTERVAL_MINUTES", "15")),
+        reference_offload_batch_size=int(os.getenv("SMARTBLASTER_REFERENCE_OFFLOAD_BATCH_SIZE", "25")),
         config_schema_version=int(os.getenv("SMARTBLASTER_CONFIG_SCHEMA_VERSION", "1")),
     )

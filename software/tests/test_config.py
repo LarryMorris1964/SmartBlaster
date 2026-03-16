@@ -29,4 +29,7 @@ def test_default_runtime_config() -> None:
     assert cfg.training_mode_enabled is False
     assert cfg.training_capture_interval_minutes == 60
     assert cfg.validate_capabilities_enabled is False
+    assert cfg.reference_offload_enabled is False
+    assert cfg.reference_offload_interval_minutes == 15
+    assert cfg.reference_offload_batch_size == 25
     assert cfg.config_schema_version == 1

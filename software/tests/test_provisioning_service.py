@@ -38,6 +38,9 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
             training_mode_enabled=True,
             training_capture_interval_minutes=60,
             validate_capabilities_enabled=True,
+            reference_offload_enabled=True,
+            reference_offload_interval_minutes=20,
+            reference_offload_batch_size=40,
             config_schema_version=1,
         )
     )
@@ -60,6 +63,9 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
     assert '"training_mode_enabled": true' in text
     assert '"training_capture_interval_minutes": 60' in text
     assert '"validate_capabilities_enabled": true' in text
+    assert '"reference_offload_enabled": true' in text
+    assert '"reference_offload_interval_minutes": 20' in text
+    assert '"reference_offload_batch_size": 40' in text
 
 
 
