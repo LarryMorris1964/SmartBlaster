@@ -12,7 +12,7 @@ Target: Raspberry Pi OS Lite (64-bit)
 - Enable SSH
 - Set username/password
 - Configure Wi-Fi country (required for AP/network tooling)
-- Optionally preconfigure home Wi-Fi for first boot access
+- Optionally preconfigure home Wi-Fi for first boot SSH access only (does not bypass SmartBlaster setup/calibration)
 5. Write image and safely eject SD card.
 
 ## 2. First Boot OS Hardening and Updates
@@ -69,6 +69,21 @@ curl -fsS http://127.0.0.1:8080/health
 journalctl -u smartblaster.service -n 100 --no-pager
 ```
 
+4. AP/Wi-Fi sanity checks (recommended on first boot):
+
+```bash
+# Confirm Wi-Fi driver reports AP support
+iw list | grep -A 10 "Supported interface modes"
+
+# Confirm AP dependencies are present/running when setup mode is active
+sudo systemctl status hostapd dnsmasq --no-pager
+
+# If setup SSID is not visible on phone, inspect service logs again
+sudo journalctl -u smartblaster.service -n 120 --no-pager
+```
+
+You should see `AP` listed in supported interface modes. If not, AP mode will not work reliably.
+
 ## 5. Files That Must Exist On Device
 
 - Software root: `/opt/smartblaster/software`
@@ -82,3 +97,4 @@ journalctl -u smartblaster.service -n 100 --no-pager
 - Pi OS Lite is sufficient for SmartBlaster.
 - SmartBlaster uses FastAPI + camera/IR services and does not require desktop UI.
 - `tflite-runtime` installation is best-effort because wheel availability depends on Python version and architecture.
+- First boot still enters setup mode until setup state is saved; Wi-Fi connectivity alone does not skip setup.
