@@ -58,3 +58,10 @@ By default, helper files ending in _rois are skipped. Add --include-auxiliary-im
 - WORKAROUND: `set_temp` is currently derived from `follow_me` in the parser.
 - Why: the `set_temp` glyph is low-contrast/noisy in current sample images and is not yet reliable as a direct detection target.
 - TODO: replace this workaround with direct `set_temp` detection once a stable detector is implemented and validated.
+
+## Milestone Status
+
+- Milestone reached on 2026-03-15 for `midea_kjr_12b_dp_t` sample-set tuning.
+- Current labeled baseline: all tracked fields evaluate at `1.0` accuracy on the 3-image Midea sample set, with `all_correct_images = 3`.
+- Checkpoint commit for the final temperature fix: `8d48815` (`Temperature: add anchored ROI gating and right-shift candidates`).
+- Next phase: expand validation with new real hardware captures before changing core parser geometry again.
