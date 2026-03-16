@@ -6,6 +6,7 @@ from PIL import Image
 
 from smartblaster.provisioning.camera_setup import CameraSetupService, ReferenceImageStore
 from smartblaster.provisioning.service import ProvisioningService
+from smartblaster.provisioning.update import UpdateApplyResult, UpdateStatus
 from smartblaster.provisioning.web import create_provisioning_app
 from smartblaster.vision.models import DisplayMode, FanSpeedLevel, ThermostatDisplayState
 
@@ -50,6 +51,30 @@ class FakeParser:
 
 def _fake_parser_factory(model_id: str) -> FakeParser:  # noqa: ARG001
     return FakeParser()
+
+
+class FakeUpdater:
+    def status(self) -> UpdateStatus:
+        return UpdateStatus(
+            enabled=True,
+            repo="owner/repo",
+            current_version="0.1.0",
+            latest_version="0.2.0",
+            update_available=True,
+            release_url="https://github.com/owner/repo/releases/tag/v0.2.0",
+            error=None,
+        )
+
+    def apply(self, target_version: str | None = None) -> UpdateApplyResult:
+        return UpdateApplyResult(
+            ok=True,
+            message="Update installed. Restart required.",
+            command="python -m pip install ...",
+            target_version=target_version or "v0.2.0",
+            restart_required=True,
+            stdout="done",
+            stderr=None,
+        )
 
 
 def test_camera_status_endpoint(tmp_path: Path) -> None:
@@ -120,7 +145,7 @@ def test_camera_reference_capture_persists_files(tmp_path: Path) -> None:
 
 
 def test_setup_page_mentions_camera_setup() -> None:
-    app = create_provisioning_app(ProvisioningService())
+    app = create_provisioning_app(ProvisioningService(), update_service=FakeUpdater())
     client = TestClient(app)
 
     response = client.get("/")
@@ -128,3 +153,77 @@ def test_setup_page_mentions_camera_setup() -> None:
     assert response.status_code == 200
     assert "Camera Setup" in response.text
     assert "Save Reference Image" in response.text
+    assert "Device Name" in response.text
+    assert "Software Version" in response.text
+    assert "Owner's Manual" in response.text
+    assert "App Update (GitHub)" in response.text
+    assert "Reboot Device" in response.text
+
+
+def test_device_info_endpoint_uses_saved_name(tmp_path: Path) -> None:
+    state_file = tmp_path / "device_setup.json"
+    state_file.write_text('{"device_name": "Bedroom SmartBlaster"}', encoding="utf-8")
+
+    app = create_provisioning_app(ProvisioningService(state_file=state_file))
+    client = TestClient(app)
+
+    response = client.get("/api/device-info")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["device_name"] == "Bedroom SmartBlaster"
+    assert "software_version" in payload
+
+
+def test_portal_docs_endpoints_return_text() -> None:
+    app = create_provisioning_app(ProvisioningService())
+    client = TestClient(app)
+
+    readme_response = client.get("/api/readme")
+    manual_response = client.get("/api/owners-manual")
+
+    assert readme_response.status_code == 200
+    assert manual_response.status_code == 200
+    assert "text" in readme_response.json()
+    assert "text" in manual_response.json()
+
+
+def test_update_status_endpoint_returns_payload() -> None:
+    app = create_provisioning_app(ProvisioningService(), update_service=FakeUpdater())
+    client = TestClient(app)
+
+    response = client.get("/api/update/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["enabled"] is True
+    assert payload["update_available"] is True
+    assert payload["latest_version"] == "0.2.0"
+
+
+def test_update_apply_endpoint_returns_success() -> None:
+    app = create_provisioning_app(ProvisioningService(), update_service=FakeUpdater())
+    client = TestClient(app)
+
+    response = client.post("/api/update/apply", json={"target_version": "v0.2.0"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["target_version"] == "v0.2.0"
+
+
+def test_system_reboot_endpoint_requests_reboot() -> None:
+    calls = {"count": 0}
+
+    def fake_reboot() -> None:
+        calls["count"] += 1
+
+    app = create_provisioning_app(ProvisioningService(), reboot_action=fake_reboot)
+    client = TestClient(app)
+
+    response = client.post("/api/system/reboot")
+
+    assert response.status_code == 200
+    assert calls["count"] == 1
+    assert "Reboot requested" in response.json()["message"]

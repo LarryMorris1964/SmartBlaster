@@ -1,4 +1,9 @@
-from smartblaster.bootstrap import _apply_setup_state_to_env, _resolve_mode
+from pathlib import Path
+
+import smartblaster.bootstrap as bootstrap
+import smartblaster.provisioning.system as system
+from smartblaster.bootstrap import _apply_setup_state_to_env, _load_setup_state, _resolve_mode
+from smartblaster.services.runtime import RuntimeNetworkUnavailable
 
 
 def test_resolve_mode_auto_without_state_uses_setup() -> None:
@@ -9,12 +14,24 @@ def test_resolve_mode_auto_with_state_uses_run() -> None:
     assert _resolve_mode("auto", state_exists=True) == "run"
 
 
+def test_resolve_mode_auto_with_force_setup_flag_uses_setup() -> None:
+    assert (
+        _resolve_mode(
+            "auto",
+            state_exists=True,
+            setup_state={"force_setup_on_next_boot": True},
+        )
+        == "setup"
+    )
+
+
 def test_resolve_mode_explicit_run() -> None:
     assert _resolve_mode("run", state_exists=False) == "run"
 
 
 def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
     keys = [
+        "SMARTBLASTER_DEVICE_NAME",
         "SMARTBLASTER_THERMOSTAT_PROFILE_ID",
         "SMARTBLASTER_CAMERA_ENABLED",
         "SMARTBLASTER_DAILY_ON_TIME",
@@ -48,6 +65,7 @@ def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
 
     _apply_setup_state_to_env(
         {
+            "device_name": "Hallway SmartBlaster",
             "thermostat_profile_id": "midea_kjr_12b_dp_t",
             "camera_enabled": True,
             "daily_on_time": "09:00",
@@ -80,6 +98,7 @@ def test_apply_setup_state_to_env_sets_expected_values(monkeypatch) -> None:
 
     import os
 
+    assert os.environ["SMARTBLASTER_DEVICE_NAME"] == "Hallway SmartBlaster"
     assert os.environ["SMARTBLASTER_THERMOSTAT_PROFILE_ID"] == "midea_kjr_12b_dp_t"
     assert os.environ["SMARTBLASTER_CAMERA_ENABLED"] == "true"
     assert os.environ["SMARTBLASTER_DAILY_ON_TIME"] == "09:00"
@@ -124,3 +143,103 @@ def test_apply_setup_state_to_env_ignores_invalid_values(monkeypatch) -> None:
 
     assert "SMARTBLASTER_DAILY_ON_TIME" not in os.environ
     assert "SMARTBLASTER_TARGET_TEMPERATURE_C" not in os.environ
+
+
+def test_load_setup_state_migrates_legacy_payload(tmp_path) -> None:
+    state_file = tmp_path / "device_setup.json"
+    state_file.write_text('{"wifi_ssid":"HomeWiFi"}', encoding="utf-8")
+
+    loaded = _load_setup_state(state_file)
+
+    assert loaded["setup_state_version"] == 1
+    assert loaded["config_schema_version"] == 1
+    assert loaded["device_name"] == "SmartBlaster"
+
+
+def test_run_runtime_network_failure_sets_force_setup_and_requests_reboot(monkeypatch, tmp_path: Path) -> None:
+    state_file = tmp_path / "device_setup.json"
+    state_file.write_text('{"wifi_ssid": "HomeWiFi", "config_schema_version": 1}', encoding="utf-8")
+
+    class FakeRuntime:
+        def run_forever(self) -> None:
+            raise RuntimeNetworkUnavailable("network unavailable")
+
+    class FakeRuntimeFactory:
+        @staticmethod
+        def from_env() -> FakeRuntime:
+            return FakeRuntime()
+
+    reboot_requested = {"called": False}
+
+    def fake_reboot() -> None:
+        reboot_requested["called"] = True
+
+    monkeypatch.setattr(bootstrap, "SmartBlasterRuntime", FakeRuntimeFactory)
+    monkeypatch.setattr(bootstrap, "request_reboot", fake_reboot)
+
+    code = bootstrap._run_runtime(state_file)
+
+    assert code == 75
+    assert reboot_requested["called"] is True
+    loaded = bootstrap._load_setup_state(state_file)
+    assert loaded["force_setup_on_next_boot"] is True
+
+
+def test_reboot_commands_from_env_default_is_auto(monkeypatch) -> None:
+    monkeypatch.delenv("SMARTBLASTER_REBOOT_COMMAND", raising=False)
+
+    commands = bootstrap._reboot_commands_from_env()
+
+    assert commands == [["systemctl", "reboot"], ["reboot"]]
+
+
+def test_reboot_commands_from_env_allowlisted_value(monkeypatch) -> None:
+    monkeypatch.setenv("SMARTBLASTER_REBOOT_COMMAND", "reboot")
+
+    commands = bootstrap._reboot_commands_from_env()
+
+    assert commands == [["reboot"]]
+
+
+def test_request_reboot_tries_until_success(monkeypatch) -> None:
+    monkeypatch.setenv("SMARTBLASTER_REBOOT_COMMAND", "auto")
+    calls: list[list[str]] = []
+
+    class DummyResult:
+        def __init__(self, returncode: int) -> None:
+            self.returncode = returncode
+
+    def fake_run(command, check, capture_output, text):  # noqa: ANN001, ARG001
+        calls.append(command)
+        if command == ["systemctl", "reboot"]:
+            return DummyResult(returncode=1)
+        return DummyResult(returncode=0)
+
+    monkeypatch.setattr(system.subprocess, "run", fake_run)
+
+    system.request_reboot()
+
+    assert calls == [["systemctl", "reboot"], ["reboot"]]
+
+
+def test_setup_auto_recover_loop_reboots_when_network_returns(monkeypatch) -> None:
+    checks = {"count": 0}
+    rebooted = {"called": False}
+
+    def fake_network_checker() -> bool:
+        checks["count"] += 1
+        return checks["count"] >= 2
+
+    def fake_reboot() -> None:
+        rebooted["called"] = True
+
+    monkeypatch.setattr(bootstrap.time, "sleep", lambda _seconds: None)
+
+    bootstrap._setup_auto_recover_loop(
+        grace_seconds=0,
+        check_seconds=30,
+        network_checker=fake_network_checker,
+        reboot_action=fake_reboot,
+    )
+
+    assert rebooted["called"] is True

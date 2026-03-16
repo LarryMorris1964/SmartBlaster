@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import json
-import os
 from pathlib import Path
 import re
 
 from smartblaster.ir.command import MideaFan, MideaPreset, MideaSwing
 from smartblaster.provisioning.network import WifiConfigurator
+from smartblaster.provisioning.state import persist_setup_state
 from smartblaster.thermostats.library import get_profile, list_profiles
 
 
@@ -19,6 +18,7 @@ class SetupRequest:
     wifi_password: str
     thermostat_profile_id: str
     camera_enabled: bool
+    device_name: str = "SmartBlaster"
     daily_on_time: str = "10:00"
     daily_off_time: str = "16:00"
     target_temperature_c: float = 24.0
@@ -87,6 +87,8 @@ class ProvisioningService:
         )
 
     def _validate_request(self, request: SetupRequest) -> None:
+        if not request.device_name.strip():
+            raise ValueError("device_name is required")
         if not request.wifi_ssid.strip():
             raise ValueError("wifi_ssid is required")
         if len(request.wifi_password) < 8:
@@ -153,8 +155,8 @@ class ProvisioningService:
         return bool(ssid.strip()) and len(password) >= 8
 
     def _persist_setup(self, request: SetupRequest) -> None:
-        self.state_file.parent.mkdir(parents=True, exist_ok=True)
         payload = {
+            "device_name": request.device_name.strip(),
             "wifi_ssid": request.wifi_ssid,
             "thermostat_profile_id": request.thermostat_profile_id,
             "camera_enabled": request.camera_enabled,
@@ -184,12 +186,7 @@ class ProvisioningService:
             "reference_offload_batch_size": request.reference_offload_batch_size,
             "config_schema_version": request.config_schema_version,
         }
-        tmp_file = self.state_file.with_suffix(f"{self.state_file.suffix}.tmp")
-        with tmp_file.open("w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
-            handle.flush()
-            os.fsync(handle.fileno())
-        tmp_file.replace(self.state_file)
+        persist_setup_state(self.state_file, payload)
 
 
 def _is_valid_hhmm(value: str) -> bool:

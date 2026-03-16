@@ -8,6 +8,7 @@ import os
 
 @dataclass(frozen=True)
 class RuntimeConfig:
+    device_name: str = "SmartBlaster"
     log_level: str = "INFO"
     dry_run: bool = True
     ir_tx_gpio: int = 4
@@ -53,6 +54,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def from_env() -> RuntimeConfig:
     return RuntimeConfig(
+        device_name=os.getenv("SMARTBLASTER_DEVICE_NAME", "SmartBlaster"),
         log_level=os.getenv("SMARTBLASTER_LOG_LEVEL", "INFO"),
         dry_run=_env_bool("SMARTBLASTER_DRY_RUN", True),
         ir_tx_gpio=int(os.getenv("SMARTBLASTER_IR_TX_GPIO", "4")),

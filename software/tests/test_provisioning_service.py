@@ -13,6 +13,7 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
 
     result = svc.apply_setup(
         SetupRequest(
+            device_name="Living Room SmartBlaster",
             wifi_ssid="HomeWiFi",
             wifi_password="supersecret",
             thermostat_profile_id="midea_kjr_12b_dp_t",
@@ -48,6 +49,7 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
     assert result.ok is True
     assert state_file.exists()
     text = state_file.read_text(encoding="utf-8")
+    assert "Living Room SmartBlaster" in text
     assert "HomeWiFi" in text
     assert "midea_kjr_12b_dp_t" in text
     assert "09:15" in text
@@ -66,6 +68,8 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
     assert '"reference_offload_enabled": true' in text
     assert '"reference_offload_interval_minutes": 20' in text
     assert '"reference_offload_batch_size": 40' in text
+    assert '"setup_state_version": 1' in text
+    assert '"saved_by_software_version"' in text
 
 
 
@@ -83,6 +87,23 @@ def test_apply_setup_rejects_short_password(tmp_path: Path) -> None:
         assert False, "expected ValueError"
     except ValueError as ex:
         assert "wifi_password" in str(ex)
+
+
+def test_apply_setup_rejects_empty_device_name(tmp_path: Path) -> None:
+    svc = ProvisioningService(state_file=tmp_path / "device_setup.json")
+    try:
+        svc.apply_setup(
+            SetupRequest(
+                device_name="  ",
+                wifi_ssid="HomeWiFi",
+                wifi_password="supersecret",
+                thermostat_profile_id="midea_kjr_12b_dp_t",
+                camera_enabled=False,
+            )
+        )
+        assert False, "expected ValueError"
+    except ValueError as ex:
+        assert "device_name" in str(ex)
 
 
 def test_apply_setup_wifi_verification_failure(tmp_path: Path) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -15,57 +16,83 @@ from smartblaster.hardware.camera import CameraService
 from smartblaster.provisioning.camera_setup import CameraSetupService, ReferenceImageStore
 from smartblaster.provisioning.network import NmcliWifiConfigurator
 from smartblaster.provisioning.service import ProvisioningService, SetupRequest
+from smartblaster.provisioning.state import load_setup_state, software_version
+from smartblaster.provisioning.system import request_reboot
+from smartblaster.provisioning.update import GitHubAppUpdater
 
 
 class SetupPayload(BaseModel):
-  wifi_ssid: str = Field(min_length=1)
-  wifi_password: str = Field(min_length=8)
-  thermostat_profile_id: str
-  camera_enabled: bool = False
-  daily_on_time: str = Field(default="10:00", pattern=r"^\d{2}:\d{2}$")
-  daily_off_time: str = Field(default="16:00", pattern=r"^\d{2}:\d{2}$")
-  target_temperature_c: float = Field(default=24.0, ge=16.0, le=30.0)
-  timezone: str = Field(default="UTC", min_length=1)
-  active_days: list[str] = Field(default_factory=lambda: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
-  fan_mode: str = Field(default="auto")
-  swing_mode: str = Field(default="off")
-  preset_mode: str = Field(default="none")
-  thermostat_temperature_unit: str = Field(default="C")
-  inverter_source_enabled: bool = False
-  inverter_source_type: str = Field(default="none")
-  inverter_surplus_start_w: int = Field(default=0, ge=0)
-  inverter_surplus_stop_w: int = Field(default=0, ge=0)
-  status_history_file: str = Field(default="data/thermostat_status_history.log")
-  status_diagnostic_mode: bool = False
-  status_image_dir: str = Field(default="data/status_images")
-  reference_image_dir: str = Field(default="data/reference_images")
-  reference_capture_on_parse_failure: bool = True
-  training_mode_enabled: bool = False
-  training_capture_interval_minutes: int = Field(default=60, ge=1)
-  validate_capabilities_enabled: bool = False
-  reference_offload_enabled: bool = False
-  reference_offload_interval_minutes: int = Field(default=15, ge=1)
-  reference_offload_batch_size: int = Field(default=25, ge=1)
-  config_schema_version: int = Field(default=1, ge=1)
+    device_name: str = Field(default="SmartBlaster", min_length=1)
+    wifi_ssid: str = Field(min_length=1)
+    wifi_password: str = Field(min_length=8)
+    thermostat_profile_id: str
+    camera_enabled: bool = False
+    daily_on_time: str = Field(default="10:00", pattern=r"^\d{2}:\d{2}$")
+    daily_off_time: str = Field(default="16:00", pattern=r"^\d{2}:\d{2}$")
+    target_temperature_c: float = Field(default=24.0, ge=16.0, le=30.0)
+    timezone: str = Field(default="UTC", min_length=1)
+    active_days: list[str] = Field(default_factory=lambda: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
+    fan_mode: str = Field(default="auto")
+    swing_mode: str = Field(default="off")
+    preset_mode: str = Field(default="none")
+    thermostat_temperature_unit: str = Field(default="C")
+    inverter_source_enabled: bool = False
+    inverter_source_type: str = Field(default="none")
+    inverter_surplus_start_w: int = Field(default=0, ge=0)
+    inverter_surplus_stop_w: int = Field(default=0, ge=0)
+    status_history_file: str = Field(default="data/thermostat_status_history.log")
+    status_diagnostic_mode: bool = False
+    status_image_dir: str = Field(default="data/status_images")
+    reference_image_dir: str = Field(default="data/reference_images")
+    reference_capture_on_parse_failure: bool = True
+    training_mode_enabled: bool = False
+    training_capture_interval_minutes: int = Field(default=60, ge=1)
+    validate_capabilities_enabled: bool = False
+    reference_offload_enabled: bool = False
+    reference_offload_interval_minutes: int = Field(default=15, ge=1)
+    reference_offload_batch_size: int = Field(default=25, ge=1)
+    config_schema_version: int = Field(default=1, ge=1)
 
 
 class CameraReferencePayload(BaseModel):
-  thermostat_profile_id: str
-  phase: str = Field(default="install_camera_setup", min_length=1)
-  label: str | None = None
-  include_overlay: bool = True
-  reference_image_dir: str | None = None
+    thermostat_profile_id: str
+    phase: str = Field(default="install_camera_setup", min_length=1)
+    label: str | None = None
+    include_overlay: bool = True
+    reference_image_dir: str | None = None
+
+
+class UpdateApplyPayload(BaseModel):
+    target_version: str | None = None
+
+
+def _software_version() -> str:
+    return software_version()
+
+
+def _read_portal_doc(doc_path: Path, *, fallback: str) -> str:
+    try:
+        text = doc_path.read_text(encoding="utf-8")
+    except Exception:
+        return fallback
+    lines = [line.rstrip() for line in text.splitlines()]
+    # Keep this concise for captive portal readability.
+    return "\n".join(lines[:120])
 
 
 def create_provisioning_app(
     service: ProvisioningService | None = None,
     camera_setup_service: CameraSetupService | None = None,
+    update_service: GitHubAppUpdater | None = None,
+    reboot_action: Callable[[], None] | None = None,
 ) -> FastAPI:
     provisioning = service or ProvisioningService()
     camera_setup = camera_setup_service or CameraSetupService(
         camera=CameraService(),
         reference_store=ReferenceImageStore(),
     )
+    updater = update_service or GitHubAppUpdater.from_env()
+    rebooter = reboot_action or request_reboot
     app = FastAPI(title="SmartBlaster Provisioning", version="0.1.0")
 
     @app.get("/health")
@@ -76,11 +103,58 @@ def create_provisioning_app(
     def thermostats() -> list[dict[str, object]]:
         return provisioning.available_thermostats()
 
+    @app.get("/api/device-info")
+    def device_info() -> dict[str, str]:
+        setup_state = load_setup_state(provisioning.state_file)
+        saved_name = setup_state.get("device_name")
+        device_name = str(saved_name).strip() if isinstance(saved_name, str) and saved_name.strip() else "SmartBlaster"
+        return {
+            "device_name": device_name,
+            "software_version": _software_version(),
+            "setup_state_version": str(setup_state.get("setup_state_version", "")),
+            "config_schema_version": str(setup_state.get("config_schema_version", "")),
+        }
+
+    @app.get("/api/update/status")
+    def update_status() -> dict[str, object]:
+        return asdict(updater.status())
+
+    @app.post("/api/update/apply")
+    def update_apply(payload: UpdateApplyPayload) -> dict[str, object]:
+        result = updater.apply(payload.target_version)
+        if not result.ok:
+            raise HTTPException(status_code=400, detail=asdict(result))
+        return asdict(result)
+
+    @app.post("/api/system/reboot")
+    def system_reboot() -> dict[str, str]:
+        rebooter()
+        return {"message": "Reboot requested."}
+
+    @app.get("/api/readme")
+    def setup_readme() -> dict[str, str]:
+        root = Path(__file__).resolve().parents[3]
+        readme_text = _read_portal_doc(
+            root / "README.md",
+            fallback="SmartBlaster setup guide is unavailable on this build.",
+        )
+        return {"title": "Setup Quick Guide", "text": readme_text}
+
+    @app.get("/api/owners-manual")
+    def owners_manual() -> dict[str, str]:
+        root = Path(__file__).resolve().parents[3]
+        manual_text = _read_portal_doc(
+            root / "docs" / "OWNER_MANUAL.md",
+            fallback="Owner's manual not found yet. See README for setup guidance.",
+        )
+        return {"title": "Owner's Manual", "text": manual_text}
+
     @app.post("/api/setup")
     def apply_setup(payload: SetupPayload) -> dict[str, object]:
         try:
             result = provisioning.apply_setup(
                 SetupRequest(
+                    device_name=payload.device_name,
                     wifi_ssid=payload.wifi_ssid,
                     wifi_password=payload.wifi_password,
                     thermostat_profile_id=payload.thermostat_profile_id,
@@ -147,7 +221,7 @@ def create_provisioning_app(
                 phase=payload.phase,
                 label=payload.label,
                 include_overlay=payload.include_overlay,
-              reference_image_dir=Path(payload.reference_image_dir) if payload.reference_image_dir else None,
+                reference_image_dir=Path(payload.reference_image_dir) if payload.reference_image_dir else None,
             )
         except Exception as ex:
             raise HTTPException(status_code=503, detail=str(ex)) from ex
@@ -188,6 +262,8 @@ def create_provisioning_app(
       .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.6rem; margin-top: 0.75rem; }
       .status-chip { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 0.65rem; }
       .camera-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem; }
+      .meta { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+      pre.doc { white-space: pre-wrap; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem; max-height: 260px; overflow: auto; }
       @media (max-width: 640px) { .camera-tools { grid-template-columns: 1fr; } }
     </style>
   </head>
@@ -195,9 +271,19 @@ def create_provisioning_app(
     <h1>SmartBlaster Setup</h1>
     <p class=\"hint\">Connect SmartBlaster to home Wi-Fi, align the camera, and save a reference capture before finishing setup.</p>
 
+    <section class="panel">
+      <div class="meta">
+        <div><strong>Device:</strong> <span id="deviceNameDisplay">SmartBlaster</span></div>
+        <div><strong>Software Version:</strong> <span id="softwareVersionDisplay">loading...</span></div>
+      </div>
+    </section>
+
     <section class=\"panel\">
       <h2>Setup</h2>
       <p class=\"hint\">Basic device configuration and thermostat profile selection.</p>
+
+      <label>Device Name</label>
+      <input id="deviceName" value="SmartBlaster" />
 
       <label>Wi-Fi SSID</label>
       <input id=\"ssid\" placeholder=\"MyHomeWiFi\" />
@@ -299,6 +385,25 @@ def create_provisioning_app(
       <p id=\"result\" class=\"hint\"></p>
     </section>
 
+    <section class=\"panel\">
+      <h2>App Update (GitHub)</h2>
+      <p id=\"updateStatus\" class=\"hint\">Checking update status...</p>
+      <label>Optional target tag (example: v0.2.0)</label>
+      <input id=\"updateTargetVersion\" placeholder=\"leave blank for latest release\" />
+      <div class=\"camera-tools\">
+        <button id=\"refreshUpdateStatus\" type=\"button\" class=\"secondary\">Refresh Update Status</button>
+        <button id=\"applyUpdate\" type=\"button\">Apply App Update</button>
+      </div>
+      <p id=\"updateResult\" class=\"hint\"></p>
+    </section>
+
+    <section class=\"panel\">
+      <h2>System</h2>
+      <p class=\"hint\">If network has recovered, reboot back into normal runtime.</p>
+      <button id=\"rebootNow\" type=\"button\" class=\"secondary\">Reboot Device</button>
+      <p id=\"rebootResult\" class=\"hint\"></p>
+    </section>
+
     <section class=\"panel\" id=\"cameraPanel\" style=\"display:none\">
       <h2>Camera Setup</h2>
       <p class=\"hint\">Use the live preview to point the camera at the thermostat, zoom in, focus, and save an install-time reference image.</p>
@@ -324,8 +429,124 @@ def create_provisioning_app(
       <p id=\"cameraReferenceResult\" class=\"hint\"></p>
     </section>
 
+    <section class=\"panel\">
+      <h2>Setup Quick Guide</h2>
+      <pre id=\"readmeText\" class=\"doc\">Loading setup guidance...</pre>
+    </section>
+
+    <section class=\"panel\">
+      <h2>Owner's Manual</h2>
+      <pre id=\"ownersManualText\" class=\"doc\">Loading owner's manual...</pre>
+    </section>
+
     <script>
       let previewTimer = null;
+
+      async function loadDeviceInfo() {
+        try {
+          const res = await fetch('/api/device-info');
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || 'Unable to load device info');
+          }
+
+          const deviceName = data.device_name || 'SmartBlaster';
+          document.getElementById('deviceName').value = deviceName;
+          document.getElementById('deviceNameDisplay').textContent = deviceName;
+          document.getElementById('softwareVersionDisplay').textContent = data.software_version || 'unknown';
+        } catch (_err) {
+          document.getElementById('softwareVersionDisplay').textContent = 'unknown';
+        }
+      }
+
+      async function loadDoc(endpoint, targetId, fallbackText) {
+        const target = document.getElementById(targetId);
+        try {
+          const res = await fetch(endpoint);
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || `Unable to load ${targetId}`);
+          }
+          target.textContent = data.text || fallbackText;
+        } catch (_err) {
+          target.textContent = fallbackText;
+        }
+      }
+
+      async function loadUpdateStatus() {
+        const updateStatus = document.getElementById('updateStatus');
+        const updateResult = document.getElementById('updateResult');
+        updateResult.textContent = '';
+        try {
+          const res = await fetch('/api/update/status');
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || 'Unable to load update status');
+          }
+
+          if (!data.enabled) {
+            updateStatus.textContent = 'Updates disabled. Set SMARTBLASTER_UPDATE_REPO to enable GitHub updates.';
+            updateStatus.className = 'hint';
+            return;
+          }
+
+          const latest = data.latest_version || 'unknown';
+          const current = data.current_version || 'unknown';
+          const availability = data.update_available ? 'update available' : 'up to date';
+          updateStatus.textContent = `Repo ${data.repo}: current=${current}, latest=${latest} (${availability})`;
+          updateStatus.className = data.update_available ? 'hint err' : 'hint ok';
+        } catch (err) {
+          updateStatus.textContent = err.message || 'Unable to load update status';
+          updateStatus.className = 'hint err';
+        }
+      }
+
+      async function applyUpdate() {
+        const updateResult = document.getElementById('updateResult');
+        updateResult.className = 'hint';
+        updateResult.textContent = 'Applying update...';
+
+        const targetVersion = document.getElementById('updateTargetVersion').value.trim();
+        const res = await fetch('/api/update/apply', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            target_version: targetVersion || null,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          const details = data.detail || {};
+          updateResult.className = 'hint err';
+          updateResult.textContent = details.message || 'Update failed';
+          return;
+        }
+
+        updateResult.className = 'hint ok';
+        updateResult.textContent = `${data.message} Target=${data.target_version || 'unknown'}`;
+        loadUpdateStatus();
+      }
+
+      async function rebootDevice() {
+        const rebootResult = document.getElementById('rebootResult');
+        rebootResult.className = 'hint';
+        rebootResult.textContent = 'Requesting reboot...';
+
+        const res = await fetch('/api/system/reboot', {
+          method: 'POST',
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          rebootResult.className = 'hint err';
+          rebootResult.textContent = data.detail || 'Reboot request failed';
+          return;
+        }
+
+        rebootResult.className = 'hint ok';
+        rebootResult.textContent = data.message || 'Reboot requested.';
+      }
 
       async function loadProfiles() {
         const res = await fetch('/api/thermostats');
@@ -421,6 +642,7 @@ def create_provisioning_app(
 
       async function saveSetup() {
         const payload = {
+          device_name: document.getElementById('deviceName').value,
           wifi_ssid: document.getElementById('ssid').value,
           wifi_password: document.getElementById('password').value,
           thermostat_profile_id: document.getElementById('profile').value,
@@ -475,10 +697,21 @@ def create_provisioning_app(
       }
 
       document.getElementById('save').addEventListener('click', saveSetup);
+      document.getElementById('deviceName').addEventListener('input', (event) => {
+        const value = event.target.value || 'SmartBlaster';
+        document.getElementById('deviceNameDisplay').textContent = value;
+      });
       document.getElementById('camera').addEventListener('change', updateCameraPanel);
       document.getElementById('profile').addEventListener('change', refreshCameraSetup);
       document.getElementById('refreshPreview').addEventListener('click', refreshCameraSetup);
       document.getElementById('saveReference').addEventListener('click', saveReferenceImage);
+      document.getElementById('refreshUpdateStatus').addEventListener('click', loadUpdateStatus);
+      document.getElementById('applyUpdate').addEventListener('click', applyUpdate);
+      document.getElementById('rebootNow').addEventListener('click', rebootDevice);
+      loadDeviceInfo();
+      loadDoc('/api/readme', 'readmeText', 'Setup guide unavailable.');
+      loadDoc('/api/owners-manual', 'ownersManualText', 'Owner\'s manual unavailable.');
+      loadUpdateStatus();
       loadProfiles();
     </script>
   </body>

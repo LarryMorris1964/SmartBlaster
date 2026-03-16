@@ -3,6 +3,7 @@ from smartblaster.config import RuntimeConfig
 
 def test_default_runtime_config() -> None:
     cfg = RuntimeConfig()
+    assert cfg.device_name == "SmartBlaster"
     assert cfg.ir_tx_gpio == 4
     assert cfg.ir_rx_gpio == 17
     assert cfg.loop_interval_ms == 500

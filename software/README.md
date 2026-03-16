@@ -32,6 +32,10 @@ python src/main.py
 pytest
 ```
 
+## Project Diary
+
+An AI-assisted build diary lives in `docs/AI_DIARY.md`.
+
 ## New Scaffolded Modules
 
 - `src/smartblaster/config.py` — runtime settings from environment variables

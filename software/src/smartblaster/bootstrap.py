@@ -3,42 +3,48 @@
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import os
 from pathlib import Path
 import re
+import threading
+import time
 
 import uvicorn
 
 from smartblaster.provisioning.ap_mode import ApModeController
 from smartblaster.provisioning.service import ProvisioningService
+from smartblaster.provisioning.state import load_setup_state, persist_setup_state
+from smartblaster.provisioning.system import network_connected_best_effort, request_reboot, reboot_commands_from_env
 from smartblaster.provisioning.web import create_provisioning_app
-from smartblaster.services.runtime import SmartBlasterRuntime
+from smartblaster.services.runtime import RuntimeNetworkUnavailable, SmartBlasterRuntime
 
 
 def _setup_state_exists(state_file: Path) -> bool:
     return state_file.exists()
 
 
-def _resolve_mode(requested_mode: str, *, state_exists: bool) -> str:
+def _resolve_mode(requested_mode: str, *, state_exists: bool, setup_state: dict[str, object] | None = None) -> str:
     requested = requested_mode.lower().strip()
     if requested not in {"auto", "setup", "run"}:
         raise ValueError("mode must be one of: auto, setup, run")
 
     if requested == "auto":
+        if state_exists and isinstance(setup_state, dict) and setup_state.get("force_setup_on_next_boot") is True:
+            return "setup"
         return "run" if state_exists else "setup"
     return requested
 
 
 def _load_setup_state(state_file: Path) -> dict[str, object]:
-    try:
-        return json.loads(state_file.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return {}
+    return load_setup_state(state_file)
 
 
 def _apply_setup_state_to_env(setup: dict[str, object]) -> None:
+    device_name = setup.get("device_name")
+    if isinstance(device_name, str) and device_name.strip():
+        os.environ.setdefault("SMARTBLASTER_DEVICE_NAME", device_name.strip())
+
     profile_id = setup.get("thermostat_profile_id")
     if isinstance(profile_id, str) and profile_id:
         os.environ.setdefault("SMARTBLASTER_THERMOSTAT_PROFILE_ID", profile_id)
@@ -193,8 +199,12 @@ def _run_setup_server(
     ap_use_sudo: bool,
     ap_start_script: str,
     ap_stop_script: str,
+    setup_auto_recover_enabled: bool,
 ) -> int:
     print("mode=setup (captive portal scaffold)")
+
+    if setup_auto_recover_enabled:
+        _start_setup_auto_recover_thread()
 
     ap_controller: ApModeController | None = None
     if enable_ap_mode:
@@ -207,7 +217,7 @@ def _run_setup_server(
         print(f"ap_mode_started={started}")
 
     service = ProvisioningService(state_file=state_file)
-    app = create_provisioning_app(service)
+    app = create_provisioning_app(service, reboot_action=request_reboot)
     try:
         uvicorn.run(app, host=host, port=port)
     finally:
@@ -223,8 +233,54 @@ def _run_runtime(state_file: Path) -> int:
     setup = _load_setup_state(state_file)
     _apply_setup_state_to_env(setup)
     runtime = SmartBlasterRuntime.from_env()
-    runtime.run_forever()
+    try:
+        runtime.run_forever()
+    except RuntimeNetworkUnavailable as ex:
+        setup["force_setup_on_next_boot"] = True
+        persist_setup_state(state_file, setup)
+        print(f"runtime_network_failure={ex}")
+        request_reboot()
+        return 75
     return 0
+
+
+def _start_setup_auto_recover_thread() -> None:
+    grace_seconds = max(0, int(os.getenv("SMARTBLASTER_SETUP_AUTO_RECOVER_GRACE_SECONDS", "120")))
+    check_seconds = max(30, int(os.getenv("SMARTBLASTER_SETUP_AUTO_RECOVER_CHECK_SECONDS", "300")))
+
+    worker = threading.Thread(
+        target=_setup_auto_recover_loop,
+        kwargs={
+            "grace_seconds": grace_seconds,
+            "check_seconds": check_seconds,
+            "network_checker": network_connected_best_effort,
+            "reboot_action": request_reboot,
+        },
+        daemon=True,
+    )
+    worker.start()
+
+
+def _setup_auto_recover_loop(
+    *,
+    grace_seconds: int,
+    check_seconds: int,
+    network_checker,
+    reboot_action,
+) -> None:
+    if grace_seconds > 0:
+        time.sleep(grace_seconds)
+
+    while True:
+        if network_checker():
+            print("setup_auto_recover_network_connected=true")
+            reboot_action()
+            return
+        time.sleep(check_seconds)
+
+
+def _reboot_commands_from_env() -> list[list[str]]:
+    return reboot_commands_from_env()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -240,7 +296,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     state_file = Path(args.state_file)
-    mode = _resolve_mode(args.mode, state_exists=_setup_state_exists(state_file))
+    setup_state = _load_setup_state(state_file) if _setup_state_exists(state_file) else None
+    mode = _resolve_mode(args.mode, state_exists=_setup_state_exists(state_file), setup_state=setup_state)
+    setup_auto_recover_enabled = False
+
+    if mode == "setup" and isinstance(setup_state, dict) and setup_state.get("force_setup_on_next_boot") is True:
+        setup_auto_recover_enabled = True
+        setup_state["force_setup_on_next_boot"] = False
+        persist_setup_state(state_file, setup_state)
 
     if mode == "setup":
         return _run_setup_server(
@@ -251,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
             ap_use_sudo=args.ap_use_sudo,
             ap_start_script=args.ap_start_script,
             ap_stop_script=args.ap_stop_script,
+            setup_auto_recover_enabled=setup_auto_recover_enabled,
         )
     return _run_runtime(state_file=state_file)
 
