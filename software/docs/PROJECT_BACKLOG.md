@@ -21,17 +21,24 @@ Notes:
 
 ### 2. Setup Validation Workflow (IR Capability Shakeout)
 
-Status: Planned
+Status: Done — initial version shipped
 
 Goals:
-- Add a setup validation action that executes each IR command expected for the selected profile.
-- Capture before/after images for each command step.
-- Record pass/fail, parse confidence, and any error reason per step.
-- Save a validation report artifact for later review.
+- Add a setup validation action that executes each IR command expected for the selected profile. ✓
+- Capture camera-parsed state after each command step and compare against expected mode. ✓
+- Record pass/fail, parse confidence, and any error reason per step. ✓
+- Produce a `ValidationReport` JSON artifact returned from the portal endpoint. ✓
 
-Notes:
-- This should surface latent command/parse regressions before field deployment.
-- Reuse existing camera capture/reference storage where practical.
+Implementation:
+- `src/smartblaster/services/setup_validation.py` — `SetupValidator`, `ValidationReport`, `ValidationStepResult`
+- Sequences: cool → heat → dry → fan_only → off (leaves unit powered down)
+- Portal endpoint: `POST /api/validation/run` (`ValidationRunPayload`, returns report JSON)
+- Portal UI: Validation panel (visible only when camera is enabled), `settle_seconds` input, results table
+- 15 tests in `tests/test_setup_validation.py`; sleep-fn injected for zero-latency testing
+
+Open follow-ups:
+- Wire `activity_log.ir_command_verified` / `ir_command_verification_failed` into validation steps (covered by backlog item 4).
+- Persist report to disk and add history endpoint for later review.
 
 ### 3. Home Automation Integration Design
 
@@ -60,6 +67,20 @@ Goals:
 Notes:
 - `ActivityLogger` is fully injectable — pass a custom instance in tests, or let runtime create one from config.
 - `configure_logging()` is called once by `SmartBlasterRuntime.from_env()` at startup.
+
+### 5. Extend Logging to Setup / Portal Phase
+
+Status: Planned
+
+Goals:
+- Call `configure_logging()` at the start of bootstrap regardless of mode (setup or run).
+- Emit activity records for setup-phase events: setup saved, Wi-Fi configured, network failover into portal, portal reboot triggered, auto-recovery loop outcome.
+- Wire `ActivityLogger.setup_saved()` into `ProvisioningService.apply_setup()`.
+- Persist log to the same rotating JSONL file used by the runtime phase.
+
+Notes:
+- Currently `configure_logging()` is only called from `SmartBlasterRuntime.from_env()`, so setup-mode events only go to stderr.
+- Bootstrap already has an `ActivityLogger.network_failover` call at the runtime→setup failover point.
 
 ## Completed
 

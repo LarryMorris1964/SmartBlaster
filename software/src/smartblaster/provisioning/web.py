@@ -13,12 +13,16 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from smartblaster.hardware.camera import CameraService
+from smartblaster.hardware.ir import IrService
 from smartblaster.provisioning.camera_setup import CameraSetupService, ReferenceImageStore
 from smartblaster.provisioning.network import NmcliWifiConfigurator
 from smartblaster.provisioning.service import ProvisioningService, SetupRequest
 from smartblaster.provisioning.state import load_setup_state, software_version
 from smartblaster.provisioning.system import request_reboot
 from smartblaster.provisioning.update import GitHubAppUpdater
+from smartblaster.services.setup_validation import SetupValidator
+from smartblaster.services.thermostat_status import ThermostatStatusService
+from smartblaster.vision.registry import create_parser_for_model
 
 
 class SetupPayload(BaseModel):
@@ -64,6 +68,14 @@ class CameraReferencePayload(BaseModel):
 
 class UpdateApplyPayload(BaseModel):
     target_version: str | None = None
+
+
+class ValidationRunPayload(BaseModel):
+    thermostat_profile_id: str
+    camera_enabled: bool = False
+    settle_seconds: float = Field(default=3.0, ge=0.0, le=60.0)
+    reference_image_dir: str = Field(default="data/reference_images")
+    status_history_file: str = Field(default="data/validation_status_history.log")
 
 
 def _software_version() -> str:
@@ -130,6 +142,33 @@ def create_provisioning_app(
     def system_reboot() -> dict[str, str]:
         rebooter()
         return {"message": "Reboot requested."}
+
+    @app.post("/api/validation/run")
+    def run_validation(payload: ValidationRunPayload) -> dict[str, object]:
+        ir = IrService(tx_gpio=4, rx_gpio=17, dry_run=False)
+        status_service: ThermostatStatusService | None = None
+        if payload.camera_enabled:
+            try:
+                parser = create_parser_for_model(payload.thermostat_profile_id)
+                status_service = ThermostatStatusService(
+                    camera=CameraService(),
+                    parser=parser,
+                    history_file=Path(payload.status_history_file),
+                )
+            except Exception as ex:
+                raise HTTPException(status_code=503, detail=f"Camera setup failed: {ex}") from ex
+
+        validator = SetupValidator(
+            ir=ir,
+            status_service=status_service,
+            profile_id=payload.thermostat_profile_id,
+            settle_seconds=payload.settle_seconds,
+        )
+        try:
+            report = validator.run()
+        except Exception as ex:
+            raise HTTPException(status_code=500, detail=f"Validation error: {ex}") from ex
+        return report.to_dict()
 
     @app.get("/api/readme")
     def setup_readme() -> dict[str, str]:
@@ -429,6 +468,33 @@ def create_provisioning_app(
       <p id=\"cameraReferenceResult\" class=\"hint\"></p>
     </section>
 
+    <section class=\"panel\" id=\"validationPanel\" style=\"display:none\">
+      <h2>IR Capability Validation</h2>
+      <p class=\"hint\">Test each IR mode and confirm the thermostat display responds correctly. Align the camera first. Each mode is sent in sequence and the unit is powered off at the end.</p>
+
+      <label>Settle Time (seconds)</label>
+      <input id=\"validationSettleSeconds\" type=\"number\" min=\"0\" max=\"30\" step=\"1\" value=\"3\" />
+
+      <button id=\"runValidation\" type=\"button\">Run IR Capability Validation</button>
+      <p id=\"validationStatus\" class=\"hint\"></p>
+
+      <div id=\"validationResults\" style=\"display:none\">
+        <p id=\"validationOverall\" class=\"hint\"></p>
+        <table style=\"width:100%; border-collapse:collapse; margin-top:0.5rem; font-size:0.9rem;\">
+          <thead>
+            <tr style=\"border-bottom:2px solid var(--border);\">
+              <th style=\"text-align:left;padding:4px 8px\">Command</th>
+              <th style=\"text-align:left;padding:4px 8px\">Outcome</th>
+              <th style=\"text-align:left;padding:4px 8px\">Confidence</th>
+              <th style=\"text-align:left;padding:4px 8px\">Parsed Mode</th>
+              <th style=\"text-align:left;padding:4px 8px\">Error</th>
+            </tr>
+          </thead>
+          <tbody id=\"validationTableBody\"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class=\"panel\">
       <h2>Setup Quick Guide</h2>
       <pre id=\"readmeText\" class=\"doc\">Loading setup guidance...</pre>
@@ -569,6 +635,7 @@ def create_provisioning_app(
       function updateCameraPanel() {
         const enabled = document.getElementById('camera').checked;
         document.getElementById('cameraPanel').style.display = enabled ? 'block' : 'none';
+        document.getElementById('validationPanel').style.display = enabled ? 'block' : 'none';
         if (!enabled) {
           if (previewTimer) {
             clearInterval(previewTimer);
@@ -608,6 +675,62 @@ def create_provisioning_app(
         } catch (err) {
           advice.textContent = err.message || 'camera preview unavailable';
           advice.className = 'hint err';
+        }
+      }
+
+      async function runValidation() {
+        const profileId = selectedProfileId();
+        const settleSeconds = parseFloat(document.getElementById('validationSettleSeconds').value || '3');
+        const status = document.getElementById('validationStatus');
+        const resultsDiv = document.getElementById('validationResults');
+        const overall = document.getElementById('validationOverall');
+        const tbody = document.getElementById('validationTableBody');
+
+        status.className = 'hint';
+        status.textContent = 'Running validation\u2026 (this may take up to a minute)';
+        resultsDiv.style.display = 'none';
+
+        const res = await fetch('/api/validation/run', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            thermostat_profile_id: profileId,
+            camera_enabled: document.getElementById('camera').checked,
+            settle_seconds: isNaN(settleSeconds) ? 3 : settleSeconds,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          status.className = 'hint err';
+          status.textContent = data.detail || 'Validation request failed';
+          return;
+        }
+
+        status.textContent = '';
+        resultsDiv.style.display = 'block';
+
+        if (data.skipped) {
+          overall.className = 'hint';
+          overall.textContent = 'Validation skipped: camera is not enabled.';
+        } else {
+          overall.className = data.overall_pass ? 'hint ok' : 'hint err';
+          overall.textContent = data.overall_pass ? 'All steps passed.' : 'One or more steps failed.';
+        }
+
+        tbody.innerHTML = '';
+        for (const step of data.steps) {
+          const tr = document.createElement('tr');
+          tr.style.borderBottom = '1px solid var(--border)';
+          const outcomeColor = step.outcome === 'pass' ? '#0a7f2e' : step.outcome === 'skip' ? '#5c5a52' : '#b00020';
+          tr.innerHTML = `
+            <td style="padding:4px 8px">${step.command_name}</td>
+            <td style="padding:4px 8px;color:${outcomeColor};font-weight:bold">${step.outcome}</td>
+            <td style="padding:4px 8px">${step.confidence != null ? step.confidence : '\u2014'}</td>
+            <td style="padding:4px 8px">${step.parsed_mode || '\u2014'}</td>
+            <td style="padding:4px 8px;color:#b00020;font-size:0.85rem">${step.error_message || ''}</td>
+          `;
+          tbody.appendChild(tr);
         }
       }
 
@@ -697,6 +820,7 @@ def create_provisioning_app(
       }
 
       document.getElementById('save').addEventListener('click', saveSetup);
+      document.getElementById('runValidation').addEventListener('click', runValidation);
       document.getElementById('deviceName').addEventListener('input', (event) => {
         const value = event.target.value || 'SmartBlaster';
         document.getElementById('deviceNameDisplay').textContent = value;
