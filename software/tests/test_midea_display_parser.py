@@ -132,3 +132,24 @@ def test_midea_parser_reports_fan_off_when_no_fan_indicator() -> None:
     assert state.fan_speed == FanSpeedLevel.OFF
     assert state.timer_set is False
     assert state.follow_me_enabled is False
+
+
+def test_midea_parser_debug_overlays_produces_landmark_and_roi_views() -> None:
+    parser = MideaKjr12bDpTParser(normalize_display=False)
+    frame = _render_frame(
+        mode=DisplayMode.COOL,
+        temp=24,
+        fan=FanSpeedLevel.HIGH,
+        timer=True,
+        follow_me=True,
+        power_on=True,
+    )
+
+    overlays = parser.debug_overlays(frame)
+
+    assert "original_bounds" in overlays
+    assert "rois_selected" in overlays
+    assert "rois_identity" in overlays
+    assert overlays["original_bounds"].size == (1000, 500)
+    assert overlays["rois_selected"].size == (640, 360)
+    assert overlays["rois_identity"].size == (640, 360)

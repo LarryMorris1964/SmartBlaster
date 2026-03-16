@@ -51,6 +51,16 @@ def create_parser() -> argparse.ArgumentParser:
     validate_cmd.add_argument("--labels-file", required=True, help="JSONL labels manifest")
     validate_cmd.add_argument("--images-dir", help="Optional image directory to check filename existence")
 
+    debug_cmd = sub.add_parser("vision-debug-overlays", help="Render vision debug overlays for input images")
+    debug_cmd.add_argument("--model-id", default="midea_kjr_12b_dp_t")
+    debug_cmd.add_argument("--images-dir", required=True)
+    debug_cmd.add_argument("--output-dir", required=True)
+    debug_cmd.add_argument(
+        "--include-auxiliary-images",
+        action="store_true",
+        help="Include helper/overlay source files such as *_rois.jpg",
+    )
+
     return parser
 
 
@@ -89,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_vision_eval_command(args)
     if args.command == "vision-validate-labels":
         return _handle_vision_validate_labels_command(args)
+    if args.command == "vision-debug-overlays":
+        return _handle_vision_debug_overlays_command(args)
 
     command = build_command_from_args(args)
 
@@ -158,6 +170,53 @@ def _handle_vision_validate_labels_command(args: argparse.Namespace) -> int:
         return 2
 
     print(f"VISION_LABELS_OK labels={args.labels_file}")
+    return 0
+
+
+def _handle_vision_debug_overlays_command(args: argparse.Namespace) -> int:
+    parser = create_parser_for_model(args.model_id)
+    if not hasattr(parser, "debug_overlays"):
+        print(f"VISION_DEBUG_UNSUPPORTED model_id={args.model_id}")
+        return 2
+
+    images_dir = Path(args.images_dir)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    image_paths = sorted(
+        p
+        for p in images_dir.iterdir()
+        if p.is_file()
+        and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp"}
+        and (args.include_auxiliary_images or not p.stem.lower().endswith("_rois"))
+    )
+    if not image_paths:
+        print(f"VISION_DEBUG_NO_IMAGES images_dir={images_dir}")
+        return 2
+
+    exported = 0
+    view_counts: list[int] = []
+    for path in image_paths:
+        frame = path.read_bytes()
+        overlays = parser.debug_overlays(frame)
+        view_counts.append(len(overlays))
+        stem = path.stem
+        for view_name, image in overlays.items():
+            output_path = output_dir / f"{stem}.{view_name}.png"
+            image.save(output_path)
+            exported += 1
+
+    min_views = min(view_counts)
+    max_views = max(view_counts)
+    views_text = str(min_views) if min_views == max_views else f"{min_views}-{max_views}"
+
+    print(
+        "VISION_DEBUG_OVERLAYS "
+        f"images={len(image_paths)} "
+        f"views_per_image={views_text} "
+        f"exported={exported} "
+        f"output_dir={output_dir}"
+    )
     return 0
 
 

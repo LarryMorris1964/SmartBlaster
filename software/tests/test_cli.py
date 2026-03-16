@@ -96,3 +96,35 @@ def test_cli_vision_validate_labels_command_parses_options() -> None:
     assert args.command == "vision-validate-labels"
     assert args.labels_file == "data/samples/midea/labels.jsonl"
     assert args.images_dir == "data/samples/midea"
+
+
+def test_cli_vision_debug_overlays_command_parses_options() -> None:
+    parser = create_parser()
+    args = parser.parse_args(
+        [
+            "vision-debug-overlays",
+            "--model-id",
+            "midea_kjr_12b_dp_t",
+            "--images-dir",
+            "data/samples/midea",
+            "--output-dir",
+            "data/debug_overlays",
+        ]
+    )
+    assert args.command == "vision-debug-overlays"
+    assert args.model_id == "midea_kjr_12b_dp_t"
+    assert args.images_dir == "data/samples/midea"
+    assert args.output_dir == "data/debug_overlays"
+    assert args.include_auxiliary_images is False
+
+    args_with_aux = parser.parse_args(
+        [
+            "vision-debug-overlays",
+            "--images-dir",
+            "data/samples/midea",
+            "--output-dir",
+            "data/debug_overlays",
+            "--include-auxiliary-images",
+        ]
+    )
+    assert args_with_aux.include_auxiliary_images is True
