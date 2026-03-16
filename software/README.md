@@ -173,6 +173,15 @@ The captive portal setup page now includes a `Camera Setup` section intended for
 
 Reference images are stored under `data/reference_images/<phase>/...` so the same storage layout can be reused later for runtime/support lifecycle snapshots.
 
+Retention behavior:
+- phase-specific FIFO retention (oldest captures pruned first, newest retained)
+- higher default retention for high-value phases like `runtime_parse_failure`
+- lower default retention for bulk phases like `training_periodic`
+
+Offload readiness:
+- each capture metadata file tracks offload state (`pending` / `offloaded`), attempt counts, and optional remote IDs
+- this is intended to support future periodic upload/offload to a central server without changing on-device capture format
+
 Current lifecycle hook:
 - runtime parse failures can automatically save the failed source image, overlay, and error context into the reference-image store
 
