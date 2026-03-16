@@ -15,6 +15,7 @@ def test_default_runtime_config() -> None:
     assert cfg.swing_mode == "off"
     assert cfg.preset_mode == "none"
     assert cfg.camera_enabled is False
+    assert cfg.camera_health_probe_interval_minutes == 5
     assert cfg.thermostat_profile_id == "midea_kjr_12b_dp_t"
     assert cfg.thermostat_temperature_unit == "C"
     assert cfg.inverter_source_enabled is False
