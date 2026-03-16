@@ -291,9 +291,51 @@ def create_provisioning_app(
       body { font-family: Georgia, 'Times New Roman', serif; max-width: 780px; margin: 1.5rem auto; padding: 0 1rem 2rem; background: linear-gradient(180deg, #efe6d2 0%, var(--bg) 100%); color: var(--ink); }
       h1, h2 { margin-bottom: 0.35rem; }
       .panel { background: rgba(255,250,240,0.92); border: 1px solid var(--border); border-radius: 16px; padding: 1rem 1rem 1.2rem; margin-top: 1rem; box-shadow: 0 10px 24px rgba(80, 60, 20, 0.08); }
+      .setup-title {
+        font-size: 1.6rem;
+        font-weight: 900;
+        color: #174a3b;
+        text-align: center;
+        margin: 0.15rem 0 0.85rem 0;
+        letter-spacing: 0.01em;
+      }
+      .subgroup { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 0.8rem; margin-top: 0.85rem; }
+      .subgroup-title { margin: 0 0 0.15rem 0; font-size: 1.02rem; }
+      .top-group > .subgroup-title {
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: var(--accent);
+        text-align: center;
+        margin-bottom: 0.35rem;
+        letter-spacing: 0.01em;
+      }
+      .top-group > .hint {
+        margin: 0 auto 0.85rem auto;
+        max-width: 42rem;
+        text-align: center;
+        color: #4d4a42;
+        padding-bottom: 0.55rem;
+        border-bottom: 1px solid var(--border);
+      }
+      h4.subgroup-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--ink);
+        text-align: left;
+      }
+      .subgroup .hint { margin-top: 0; }
+      #perDayScheduleDetails > summary { cursor: pointer; color: var(--accent); font-weight: 700; padding: 0.3rem 0; list-style: none; user-select: none; }
+      .schedule-wrap { display: flex; flex-direction: column; }
+      #perDayScheduleDetails { order: 2; margin-top: 0.75rem; }
+      .schedule-main { order: 1; }
+      #mondayLabel .monday-label-monday { display: none; }
+      #perDayScheduleDetails[open] ~ .schedule-main #mondayLabel .monday-label-daily { display: none; }
+      #perDayScheduleDetails[open] ~ .schedule-main #mondayLabel .monday-label-monday { display: inline; }
       .grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
       label { display:block; margin-top: 0.8rem; font-weight: 700; }
-      input, select, button { width: 100%; padding: 0.7rem; margin-top: 0.25rem; border-radius: 10px; border: 1px solid var(--border); box-sizing: border-box; }
+      input:not([type="checkbox"]), select, button { width: 100%; padding: 0.7rem; margin-top: 0.25rem; border-radius: 10px; border: 1px solid var(--border); box-sizing: border-box; }
+      label.checkbox-row { display: flex; align-items: center; justify-content: flex-start; text-align: left; gap: 0.5rem; }
+      input[type="checkbox"] { width: auto; display: inline-block; flex: 0 0 auto; padding: 0; margin: 0; border: none; accent-color: var(--accent); }
       button { background: var(--accent); color: white; border: none; font-weight: 700; cursor: pointer; }
       button.secondary { background: #d8c7a0; color: #2e2417; }
       .hint { color: #5c5a52; font-size: 0.95rem; }
@@ -303,9 +345,14 @@ def create_provisioning_app(
       .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.6rem; margin-top: 0.75rem; }
       .status-chip { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 0.65rem; }
       .camera-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem; }
+      .schedule-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+      .schedule-grid div { font-size: 0.92rem; }
       .meta { display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
       pre.doc { white-space: pre-wrap; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem; max-height: 260px; overflow: auto; }
-      @media (max-width: 640px) { .camera-tools { grid-template-columns: 1fr; } }
+      @media (max-width: 640px) {
+        .camera-tools { grid-template-columns: 1fr; }
+        .schedule-grid { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
@@ -320,107 +367,187 @@ def create_provisioning_app(
     </section>
 
     <section class=\"panel\">
-      <h2>Setup</h2>
-      <p class=\"hint\">Basic device configuration and thermostat profile selection.</p>
+      <h2 class="setup-title">Setup</h2>
 
-      <label>Device Name</label>
-      <input id="deviceName" value="SmartBlaster" />
+      <div class="subgroup top-group">
+        <h3 class="subgroup-title">Device And Thermostat</h3>
+        <p class="hint">Name this SmartBlaster, connect it to home Wi-Fi, and choose the thermostat model it will control.</p>
 
-      <label>Wi-Fi SSID</label>
-      <input id=\"ssid\" placeholder=\"MyHomeWiFi\" />
+        <label>Device Name</label>
+        <input id="deviceName" value="SmartBlaster" />
 
-      <label>Wi-Fi Password</label>
-      <input id=\"password\" type=\"password\" />
+        <label>Wi-Fi SSID</label>
+        <input id=\"ssid\" placeholder=\"MyHomeWiFi\" />
 
-      <label>Thermostat Profile</label>
-      <select id=\"profile\"></select>
+        <label>Wi-Fi Password</label>
+        <input id=\"password\" type=\"password\" />
 
-      <label><input id=\"camera\" type=\"checkbox\" /> Enable camera verification</label>
+        <label>Thermostat Model</label>
+        <select id=\"profile\">
+          <option value="midea_kjr_12b_dp_t" selected>Midea</option>
+        </select>
+        <p class="hint">Only the current Midea launch profile is supported right now. Additional thermostat models can be added later without changing the setup flow.</p>
+      </div>
 
-      <label>Daily Cool Start (HH:MM)</label>
-      <input id="dailyOn" value="10:00" />
+      <div class="subgroup top-group">
+        <h3 class="subgroup-title">Schedule</h3>
+        <p class="hint">Define when to turn cooling ON (solar surplus) and OFF (solar deficit).</p>
 
-      <label>Daily Cool Stop (HH:MM)</label>
-      <input id="dailyOff" value="15:00" />
+        <div class="schedule-wrap">
+          <details id="perDayScheduleDetails">
+            <summary>
+              &#9654; Allow per-weekday times
+            </summary>
+            <div class="schedule-grid" style="margin-top:0.5rem;">
+              <div>Tuesday</div><input id="sched_tue_on" value="10:00" /><input id="sched_tue_off" value="15:00" />
+              <div>Wednesday</div><input id="sched_wed_on" value="10:00" /><input id="sched_wed_off" value="15:00" />
+              <div>Thursday</div><input id="sched_thu_on" value="10:00" /><input id="sched_thu_off" value="15:00" />
+              <div>Friday</div><input id="sched_fri_on" value="10:00" /><input id="sched_fri_off" value="15:00" />
+              <div>Saturday</div><input id="sched_sat_on" value="10:00" /><input id="sched_sat_off" value="15:00" />
+              <div>Sunday</div><input id="sched_sun_on" value="10:00" /><input id="sched_sun_off" value="15:00" />
+            </div>
+          </details>
 
-      <label>Target Temperature (°C)</label>
-      <input id="targetTemp" type="number" min="16" max="30" step="0.5" value="26" />
+          <div class="schedule-grid schedule-main" style="margin-top:0.5rem;">
+            <div><strong>Day</strong></div>
+            <div><strong>ON</strong></div>
+            <div><strong>OFF</strong></div>
+            <div id="mondayLabel"><span class="monday-label-daily">Daily</span><span class="monday-label-monday">Monday</span></div>
+            <input id="sched_mon_on" value="10:00" />
+            <input id="sched_mon_off" value="15:00" />
+          </div>
+        </div>
 
-      <label>Thermostat Temperature Unit</label>
-      <select id="tempUnit">
-        <option value="C" selected>Celsius (°C)</option>
-        <option value="F">Fahrenheit (°F)</option>
-      </select>
+        <label>Timezone</label>
+        <input id="timezone" value="UTC" />
 
-      <label>Timezone</label>
-      <input id="timezone" value="UTC" />
+        <label>Active Days (comma-separated, mon..sun)</label>
+        <input id="activeDays" value="mon,tue,wed,thu,fri,sat,sun" />
+      </div>
 
-      <label>Active Days (comma-separated, mon..sun)</label>
-      <input id="activeDays" value="mon,tue,wed,thu,fri,sat,sun" />
+      <div class="subgroup top-group">
+        <h3 class="subgroup-title">Cooling Target And Control</h3>
+        <p class="hint">Set target temperature and default control profile values.</p>
 
-      <label>Fan Mode</label>
-      <select id="fanMode">
-        <option value="auto" selected>Auto</option>
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-        <option value="silent">Silent</option>
-        <option value="turbo">Turbo</option>
-      </select>
+        <label>Target Temperature (°C)</label>
+        <input id="targetTemp" type="number" min="16" max="30" step="0.5" value="26" />
 
-      <label>Swing</label>
-      <select id="swingMode">
-        <option value="off" selected>Off</option>
-        <option value="vertical">Vertical</option>
-        <option value="both">Both</option>
-      </select>
+        <label>Thermostat Temperature Unit</label>
+        <select id="tempUnit">
+          <option value="C" selected>Celsius (°C)</option>
+          <option value="F">Fahrenheit (°F)</option>
+        </select>
 
-      <label>Preset</label>
-      <select id="presetMode">
-        <option value="none" selected>None</option>
-        <option value="sleep">Sleep</option>
-        <option value="eco">Eco</option>
-        <option value="boost">Boost</option>
-      </select>
+        <label>Fan Mode</label>
+        <select id="fanMode">
+          <option value="auto" selected>Auto</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="silent">Silent</option>
+          <option value="turbo">Turbo</option>
+        </select>
 
-      <label><input id="inverterEnabled" type="checkbox" /> Enable inverter event source</label>
+        <label>Swing</label>
+        <select id="swingMode">
+          <option value="off" selected>Off</option>
+          <option value="vertical">Vertical</option>
+          <option value="both">Both</option>
+        </select>
 
-      <label>Inverter Source Type</label>
-      <input id="inverterSourceType" value="none" />
+        <label>Preset</label>
+        <select id="presetMode">
+          <option value="none" selected>None</option>
+          <option value="sleep">Sleep</option>
+          <option value="eco">Eco</option>
+          <option value="boost">Boost</option>
+        </select>
+      </div>
 
-      <label>Inverter Surplus Start (W)</label>
-      <input id="inverterStartW" type="number" min="0" step="1" value="0" />
+      <div class="subgroup top-group">
+        <h3 class="subgroup-title">Solar System Integration</h3>
+        <p class="hint">Future inverter integration controls for event-driven ON/OFF.</p>
 
-      <label>Inverter Surplus Stop (W)</label>
-      <input id="inverterStopW" type="number" min="0" step="1" value="0" />
+        <label class="checkbox-row"><input id="inverterEnabled" type="checkbox" /> Enable inverter event source</label>
 
-      <label>Status History File</label>
-      <input id="statusHistoryFile" value="data/thermostat_status_history.log" />
+        <label>Inverter Source Type</label>
+        <input id="inverterSourceType" value="none" />
 
-      <label><input id="statusDiagnosticMode" type="checkbox" /> Diagnostic mode (save each status image)</label>
+        <label>Inverter Surplus Start (W)</label>
+        <input id="inverterStartW" type="number" min="0" step="1" value="0" />
 
-      <label>Status Image Directory</label>
-      <input id="statusImageDir" value="data/status_images" />
+        <label>Inverter Surplus Stop (W)</label>
+        <input id="inverterStopW" type="number" min="0" step="1" value="0" />
+      </div>
 
-      <label>Reference Image Directory</label>
-      <input id="referenceImageDir" value="data/reference_images" />
+      <div class="subgroup top-group">
+        <h3 class="subgroup-title">Power User Features</h3>
+        <p class="hint">Advanced controls for troubleshooting, validation, and data collection. Most installs can leave these at defaults.</p>
+        <label class="checkbox-row"><input id="disableCameraVerification" type="checkbox" /> Disable camera verification (advanced)</label>
 
-      <label><input id="referenceCaptureOnFailure" type="checkbox" checked /> Save failed parses as reference captures</label>
+        <div class="subgroup">
+          <h4 class="subgroup-title">Status Diagnostics</h4>
+          <p class="hint">Capture and store status snapshots for troubleshooting parser behavior.</p>
 
-      <label><input id="trainingModeEnabled" type="checkbox" /> Training mode (periodic reference captures)</label>
+          <label>Status History File</label>
+          <input id="statusHistoryFile" value="data/thermostat_status_history.log" />
 
-      <label>Training Capture Interval (minutes)</label>
-      <input id="trainingCaptureIntervalMinutes" type="number" min="1" step="1" value="60" />
+          <label class="checkbox-row"><input id="statusDiagnosticMode" type="checkbox" /> Diagnostic mode (save each status image)</label>
 
-      <label><input id="validateCapabilitiesEnabled" type="checkbox" /> Validate capabilities by cycling thermostat settings</label>
+          <label>Status Image Directory</label>
+          <input id="statusImageDir" value="data/status_images" />
+        </div>
 
-      <label><input id="referenceOffloadEnabled" type="checkbox" /> Future: enable periodic reference offload worker</label>
+        <div class="subgroup">
+          <h3 class="subgroup-title">Reference Images And Offload</h3>
+          <p class="hint">Capture training/reference images and control optional future offload behavior.</p>
 
-      <label>Offload Interval (minutes)</label>
-      <input id="referenceOffloadIntervalMinutes" type="number" min="1" step="1" value="15" />
+          <label>Reference Image Directory</label>
+          <input id="referenceImageDir" value="data/reference_images" />
 
-      <label>Offload Batch Size</label>
-      <input id="referenceOffloadBatchSize" type="number" min="1" step="1" value="25" />
+          <label class="checkbox-row"><input id="referenceCaptureOnFailure" type="checkbox" checked /> Save failed parses as reference captures</label>
+
+          <label class="checkbox-row"><input id="trainingModeEnabled" type="checkbox" /> Training mode (periodic reference captures)</label>
+
+          <label>Training Capture Interval (minutes)</label>
+          <input id="trainingCaptureIntervalMinutes" type="number" min="1" step="1" value="60" />
+
+          <label class="checkbox-row"><input id="referenceOffloadEnabled" type="checkbox" /> Future: enable periodic reference offload worker</label>
+
+          <label>Offload Interval (minutes)</label>
+          <input id="referenceOffloadIntervalMinutes" type="number" min="1" step="1" value="15" />
+
+          <label>Offload Batch Size</label>
+          <input id="referenceOffloadBatchSize" type="number" min="1" step="1" value="25" />
+        </div>
+
+        <div id="validationPanel" style="display:none; margin-top:0.8rem;">
+          <h4 class="subgroup-title">Capability Validation</h4>
+          <p class="hint">Manually cycle thermostat settings and confirm the display responds correctly. This runs immediately each time you click it and powers the unit off at the end.</p>
+
+          <label>Settle Time (seconds)</label>
+          <input id="validationSettleSeconds" type="number" min="0" max="30" step="1" value="3" />
+
+          <button id="runValidation" type="button">Run Capability Validation</button>
+          <p id="validationStatus" class="hint"></p>
+
+          <div id="validationResults" style="display:none">
+            <p id="validationOverall" class="hint"></p>
+            <table style=\"width:100%; border-collapse:collapse; margin-top:0.5rem; font-size:0.9rem;\">
+              <thead>
+                <tr style=\"border-bottom:2px solid var(--border);\">
+                  <th style=\"text-align:left;padding:4px 8px\">Command</th>
+                  <th style=\"text-align:left;padding:4px 8px\">Outcome</th>
+                  <th style=\"text-align:left;padding:4px 8px\">Confidence</th>
+                  <th style=\"text-align:left;padding:4px 8px\">Parsed Mode</th>
+                  <th style=\"text-align:left;padding:4px 8px\">Error</th>
+                </tr>
+              </thead>
+              <tbody id="validationTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
       <button id=\"save\">Save Setup</button>
       <p id=\"result\" class=\"hint\"></p>
@@ -470,33 +597,6 @@ def create_provisioning_app(
       <p id=\"cameraReferenceResult\" class=\"hint\"></p>
     </section>
 
-    <section class=\"panel\" id=\"validationPanel\" style=\"display:none\">
-      <h2>IR Capability Validation</h2>
-      <p class=\"hint\">Test each IR mode and confirm the thermostat display responds correctly. Align the camera first. Each mode is sent in sequence and the unit is powered off at the end.</p>
-
-      <label>Settle Time (seconds)</label>
-      <input id=\"validationSettleSeconds\" type=\"number\" min=\"0\" max=\"30\" step=\"1\" value=\"3\" />
-
-      <button id=\"runValidation\" type=\"button\">Run IR Capability Validation</button>
-      <p id=\"validationStatus\" class=\"hint\"></p>
-
-      <div id=\"validationResults\" style=\"display:none\">
-        <p id=\"validationOverall\" class=\"hint\"></p>
-        <table style=\"width:100%; border-collapse:collapse; margin-top:0.5rem; font-size:0.9rem;\">
-          <thead>
-            <tr style=\"border-bottom:2px solid var(--border);\">
-              <th style=\"text-align:left;padding:4px 8px\">Command</th>
-              <th style=\"text-align:left;padding:4px 8px\">Outcome</th>
-              <th style=\"text-align:left;padding:4px 8px\">Confidence</th>
-              <th style=\"text-align:left;padding:4px 8px\">Parsed Mode</th>
-              <th style=\"text-align:left;padding:4px 8px\">Error</th>
-            </tr>
-          </thead>
-          <tbody id=\"validationTableBody\"></tbody>
-        </table>
-      </div>
-    </section>
-
     <section class=\"panel\">
       <h2>Setup Quick Guide</h2>
       <pre id=\"readmeText\" class=\"doc\">Loading setup guidance...</pre>
@@ -509,6 +609,7 @@ def create_provisioning_app(
 
     <script>
       let previewTimer = null;
+      const WEEK_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
       async function loadDeviceInfo() {
         try {
@@ -617,15 +718,9 @@ def create_provisioning_app(
       }
 
       async function loadProfiles() {
-        const res = await fetch('/api/thermostats');
-        const profiles = await res.json();
         const sel = document.getElementById('profile');
-        sel.innerHTML = '';
-        for (const p of profiles) {
-          const opt = document.createElement('option');
-          opt.value = p.id;
-          opt.textContent = `${p.make} ${p.model}`;
-          sel.appendChild(opt);
+        if (!sel.value) {
+          sel.innerHTML = '<option value="midea_kjr_12b_dp_t" selected>Midea</option>';
         }
         updateCameraPanel();
       }
@@ -634,8 +729,32 @@ def create_provisioning_app(
         return document.getElementById('profile').value;
       }
 
+      function cameraVerificationEnabled() {
+        return !document.getElementById('disableCameraVerification').checked;
+      }
+
+      function propagateMonToOtherDays() {
+        const on = document.getElementById('sched_mon_on').value || '10:00';
+        const off = document.getElementById('sched_mon_off').value || '15:00';
+        for (const day of ['tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
+          document.getElementById(`sched_${day}_on`).value = on;
+          document.getElementById(`sched_${day}_off`).value = off;
+        }
+      }
+
+      function buildWeeklySchedulePayload() {
+        const schedule = {};
+        for (const day of WEEK_DAYS) {
+          schedule[day] = {
+            on_time: (document.getElementById(`sched_${day}_on`).value || '').trim(),
+            off_time: (document.getElementById(`sched_${day}_off`).value || '').trim(),
+          };
+        }
+        return schedule;
+      }
+
       function updateCameraPanel() {
-        const enabled = document.getElementById('camera').checked;
+        const enabled = cameraVerificationEnabled();
         document.getElementById('cameraPanel').style.display = enabled ? 'block' : 'none';
         document.getElementById('validationPanel').style.display = enabled ? 'block' : 'none';
         if (!enabled) {
@@ -653,7 +772,7 @@ def create_provisioning_app(
 
       async function refreshCameraSetup() {
         const profileId = selectedProfileId();
-        if (!profileId || !document.getElementById('camera').checked) {
+        if (!profileId || !cameraVerificationEnabled()) {
           return;
         }
 
@@ -697,7 +816,7 @@ def create_provisioning_app(
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             thermostat_profile_id: profileId,
-            camera_enabled: document.getElementById('camera').checked,
+            camera_enabled: cameraVerificationEnabled(),
             settle_seconds: isNaN(settleSeconds) ? 3 : settleSeconds,
           }),
         });
@@ -766,18 +885,24 @@ def create_provisioning_app(
       }
 
       async function saveSetup() {
+        if (!document.getElementById('perDayScheduleDetails').open) {
+          propagateMonToOtherDays();
+        }
+        const activeDays = WEEK_DAYS;
+
         const payload = {
           device_name: document.getElementById('deviceName').value,
           wifi_ssid: document.getElementById('ssid').value,
           wifi_password: document.getElementById('password').value,
           thermostat_profile_id: document.getElementById('profile').value,
-          camera_enabled: document.getElementById('camera').checked,
-          daily_on_time: document.getElementById('dailyOn').value,
-          daily_off_time: document.getElementById('dailyOff').value,
+          camera_enabled: cameraVerificationEnabled(),
+          daily_on_time: document.getElementById('sched_mon_on').value,
+          daily_off_time: document.getElementById('sched_mon_off').value,
+          solar_weekly_schedule: buildWeeklySchedulePayload(),
           target_temperature_c: parseFloat(document.getElementById('targetTemp').value),
           thermostat_temperature_unit: document.getElementById('tempUnit').value,
           timezone: document.getElementById('timezone').value,
-          active_days: document.getElementById('activeDays').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean),
+          active_days: activeDays,
           fan_mode: document.getElementById('fanMode').value,
           swing_mode: document.getElementById('swingMode').value,
           preset_mode: document.getElementById('presetMode').value,
@@ -792,7 +917,7 @@ def create_provisioning_app(
           reference_capture_on_parse_failure: document.getElementById('referenceCaptureOnFailure').checked,
           training_mode_enabled: document.getElementById('trainingModeEnabled').checked,
           training_capture_interval_minutes: parseInt(document.getElementById('trainingCaptureIntervalMinutes').value || '60', 10),
-          validate_capabilities_enabled: document.getElementById('validateCapabilitiesEnabled').checked,
+          validate_capabilities_enabled: false,
           reference_offload_enabled: document.getElementById('referenceOffloadEnabled').checked,
           reference_offload_interval_minutes: parseInt(document.getElementById('referenceOffloadIntervalMinutes').value || '15', 10),
           reference_offload_batch_size: parseInt(document.getElementById('referenceOffloadBatchSize').value || '25', 10),
@@ -823,11 +948,15 @@ def create_provisioning_app(
 
       document.getElementById('save').addEventListener('click', saveSetup);
       document.getElementById('runValidation').addEventListener('click', runValidation);
+      const perDayScheduleDetails = document.getElementById('perDayScheduleDetails');
+      perDayScheduleDetails.addEventListener('toggle', () => {
+        if (!perDayScheduleDetails.open) propagateMonToOtherDays();
+      });
+      document.getElementById('disableCameraVerification').addEventListener('change', updateCameraPanel);
       document.getElementById('deviceName').addEventListener('input', (event) => {
         const value = event.target.value || 'SmartBlaster';
         document.getElementById('deviceNameDisplay').textContent = value;
       });
-      document.getElementById('camera').addEventListener('change', updateCameraPanel);
       document.getElementById('profile').addEventListener('change', refreshCameraSetup);
       document.getElementById('refreshPreview').addEventListener('click', refreshCameraSetup);
       document.getElementById('saveReference').addEventListener('click', saveReferenceImage);
