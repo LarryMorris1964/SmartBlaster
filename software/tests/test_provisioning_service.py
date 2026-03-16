@@ -33,6 +33,7 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
             status_history_file="data/thermostat_status_history.log",
             status_diagnostic_mode=True,
             status_image_dir="data/status_images",
+            reference_image_dir="data/reference_images",
             config_schema_version=1,
         )
     )
@@ -50,6 +51,7 @@ def test_apply_setup_persists_state(tmp_path: Path) -> None:
     assert "\"thermostat_temperature_unit\": \"F\"" in text
     assert "thermostat_status_history.log" in text
     assert "status_images" in text
+    assert "reference_images" in text
 
 
 

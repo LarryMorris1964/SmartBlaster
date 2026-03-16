@@ -35,6 +35,7 @@ class SetupRequest:
     status_history_file: str = "data/thermostat_status_history.log"
     status_diagnostic_mode: bool = False
     status_image_dir: str = "data/status_images"
+    reference_image_dir: str = "data/reference_images"
     config_schema_version: int = 1
 
 
@@ -115,6 +116,8 @@ class ProvisioningService:
             raise ValueError("status_history_file is required")
         if not request.status_image_dir.strip():
             raise ValueError("status_image_dir is required")
+        if not request.reference_image_dir.strip():
+            raise ValueError("reference_image_dir is required")
         if request.config_schema_version < 1:
             raise ValueError("config_schema_version must be >= 1")
 
@@ -158,6 +161,7 @@ class ProvisioningService:
             "status_history_file": request.status_history_file,
             "status_diagnostic_mode": request.status_diagnostic_mode,
             "status_image_dir": request.status_image_dir,
+            "reference_image_dir": request.reference_image_dir,
             "config_schema_version": request.config_schema_version,
         }
         tmp_file = self.state_file.with_suffix(f"{self.state_file.suffix}.tmp")

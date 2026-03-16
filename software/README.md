@@ -162,6 +162,16 @@ Endpoints:
 - `GET /` setup page (basic HTML)
 - `GET /api/thermostats` profile options from library
 - `POST /api/setup` validate and persist onboarding settings
+- `GET /api/camera/status` live camera alignment metrics for the selected thermostat profile
+- `GET /api/camera/preview.jpg` live preview JPEG with parser overlay banner
+- `POST /api/camera/reference-capture` save install-time reference images with JSON metadata
+
+The captive portal setup page now includes a `Camera Setup` section intended for headless installs:
+- live preview with overlay
+- parser readability/focus/glare feedback
+- install-time reference image capture
+
+Reference images are stored under `data/reference_images/<phase>/...` so the same storage layout can be reused later for runtime/support lifecycle snapshots.
 
 ## Device Bootstrap Mode
 
