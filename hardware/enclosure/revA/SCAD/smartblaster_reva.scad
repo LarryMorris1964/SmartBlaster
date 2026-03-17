@@ -16,7 +16,6 @@ preview_section_cut = true;
 preview_section_offset_x = 10;
 preview_show_voids = true;
 preview_show_back_attached = true;
-preview_back_attached_offset_x = enclosure_width * 0.68;
 
 
 //////////////////////////////
@@ -27,6 +26,7 @@ preview_back_attached_offset_x = enclosure_width * 0.68;
 enclosure_width = 120;
 enclosure_height = 80;
 corner_radius = 8;
+preview_back_attached_offset_x = enclosure_width * 0.68;
 
 // Wall/interface
 wall = 2;
@@ -71,14 +71,14 @@ align_tab_w = 8;
 align_tab_h = 4;
 align_tab_depth = 3;
 align_tab_edge_inset = 1.2;
-align_tab_y_offset = lip_outer_h / 2 - align_tab_h / 2 - align_tab_edge_inset;
+mating_feature_y = enclosure_height / 2 - wall / 2;
 
 // Snap-fit tabs and slots
 snap_tab_w = 10;
 snap_tab_t = 1.8;
 snap_tab_l = 7;
 snap_bump = 0.7;
-snap_y_offset = 18;
+snap_y_offset = mating_feature_y - align_tab_edge_inset;
 
 // Screw posts
 screw_post_d = 8;
@@ -121,6 +121,7 @@ lip_outer_w = interface_w - 2 * lip_margin;
 lip_outer_h = interface_h - 2 * lip_margin;
 lip_inner_w = lip_outer_w - 2 * lip_thickness;
 lip_inner_h = lip_outer_h - 2 * lip_thickness;
+align_tab_y_offset = mating_feature_y - align_tab_edge_inset;
 
 groove_outer_w = lip_outer_w + 2 * fit_clearance;
 groove_outer_h = lip_outer_h + 2 * fit_clearance;
