@@ -40,7 +40,7 @@ apt-get install -y --no-install-recommends \
   python3-pip \
   python3-dev \
   build-essential \
-  libcamera0 \
+  libcamera0.7 \
   python3-libcamera \
   python3-picamera2 \
   network-manager \
