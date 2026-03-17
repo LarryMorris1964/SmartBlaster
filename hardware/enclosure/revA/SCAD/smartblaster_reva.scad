@@ -10,7 +10,7 @@ use <../../lib/blink_mount_socket.scad>
 //////////////////////////////
 
 // Options: "assembly", "front_shell", "back_shell", "camera_bracket", "ir_mount", "mating_preview"
-export_part = "assembly";
+export_part = "back_shell";
 
 // Fast-fit preview controls (used by "mating_preview")
 preview_gap = 0.8;
@@ -52,15 +52,39 @@ front_curve_height = 2.2;
 cam_diameter = 27;
 cam_clearance = 1;
 cam_hole = cam_diameter + cam_clearance;
-cam_offset_x = 0;
+cam_offset_x = -18;
 cam_offset_y = 0;
 cam_chamfer_d = cam_hole + 6;
 cam_chamfer_depth = 1.5;
 
+// Camera mount reinforcement — 4-boss square pattern around lens
+// Mounting hole C-C spacing from mechanical drawing: 27 mm (5 mm in from each edge of 37 mm plate)
+// Boss height 10 mm = standoff height shown in drawing (space for connectors/ribbon behind camera PCB)
+cam_mount_boss_d = 8.0;
+cam_mount_boss_h = 10.0;
+cam_mount_screw_d = 2.2;
+cam_mount_boss_spacing = 27.0;      // measured from drawing: bolt C-C = 37mm plate - 2×5mm edge
+
 // IR
 ir_diameter = 6;
-ir_offset_x = 25;
+ir_from_edge_ratio = 0.30;          // 0=edge, 1=lens(center)
+ir_offset_x = (enclosure_width / 2) * (1 - ir_from_edge_ratio);
 ir_offset_y = 0;
+
+// IR LED board mount (drawer-style shelf + side grooves + rear detent)
+// First-pass defaults; tune after physical measurements.
+led_board_w = 11.2;                 // board width (X), approx 7/16 in
+led_board_thickness = 1.6;          // PCB thickness (Y)
+led_mount_channel_length = 17.0;    // board insertion travel (Z)
+led_mount_front_setback = 1.2;      // gap from inner front wall to board front edge
+led_mount_fit_clearance = 0.25;     // clearance around board in grooves
+led_mount_shelf_thickness = 1.8;    // shelf thickness
+led_mount_rail_thickness = 1.4;     // side rail wall thickness
+led_mount_rail_height = 4.0;        // rail height above shelf
+led_mount_capture_lip_w = 0.8;      // inward wraparound lip width per side
+led_mount_capture_lip_h = 0.8;      // inward wraparound lip height
+led_mount_detent_t = 0.8;           // rear snap bump thickness (along Z)
+led_mount_detent_h = 0.6;           // rear snap bump height (along Y)
 
 // Lip/groove interface
 lip_margin = 5;
@@ -88,8 +112,8 @@ screw_post_h = 10;
 screw_hole_d = 2.6;
 screw_head_relief_d = 5.6;
 screw_head_relief_h = 2;
-screw_offset_x = enclosure_width / 2 - 14;
-screw_offset_y = enclosure_height / 2 - 14;
+screw_offset_x = enclosure_width / 2 - 10;  // tighter into corners to clear Pi standoffs
+screw_offset_y = enclosure_height / 2 - 10;
 
 // Blink camera snap-ring mount — shallow raised collar on exterior back face.
 // Bore measured at approx 5/16"–3/8" (~8–9.5 mm); collar OD gives ~2.75 mm wall each side.
@@ -103,6 +127,9 @@ standoff_height = 6;
 standoff_radius = 3;
 pi_mount_spacing_x = 58;
 pi_mount_spacing_y = 23;
+pi_mount_rotated = true;            // rotate 90 deg so long axis is in Y
+pi_offset_x = 30;                   // shifted under LED shelf side, clear of corner screw posts
+pi_offset_y = 0;
 
 // Honeycomb vents
 vent_hex_r = 2.8;
@@ -112,6 +139,8 @@ vent_rows = 5;
 vent_cols = 9;
 vent_region_w = 58;
 vent_region_h = 34;
+vent_offset_x = 38;                 // shift vent field toward Pi side, left edge ~X+9, clear of camera bosses
+vent_cam_clear_r = 6.0;             // exclusion radius around each camera mount boss
 
 
 //////////////////////////////
@@ -172,10 +201,30 @@ module screw_positions() {
 }
 
 module pi_standoff_positions() {
+    pi_span_x = pi_mount_rotated ? pi_mount_spacing_y : pi_mount_spacing_x;
+    pi_span_y = pi_mount_rotated ? pi_mount_spacing_x : pi_mount_spacing_y;
     for (sx = [-1, 1])
         for (sy = [-1, 1])
-            translate([sx * pi_mount_spacing_x / 2, sy * pi_mount_spacing_y / 2, 0])
+            translate([
+                pi_offset_x + sx * pi_span_x / 2,
+                pi_offset_y + sy * pi_span_y / 2,
+                0
+            ])
                 children();
+}
+
+module camera_mount_bosses() {
+    for (sx = [-1, 1])
+        for (sy = [-1, 1])
+            translate([
+                cam_offset_x + sx * cam_mount_boss_spacing / 2,
+                cam_offset_y + sy * cam_mount_boss_spacing / 2,
+                -back_shell_depth / 2 + wall - feature_attach_eps
+            ])
+                difference() {
+                    cylinder(d = cam_mount_boss_d, h = cam_mount_boss_h + feature_attach_eps, center = false, $fn = 48);
+                    cylinder(d = cam_mount_screw_d, h = cam_mount_boss_h + feature_attach_eps + 0.2, center = false, $fn = 32);
+                }
 }
 
 module alignment_tab_positions() {
@@ -203,6 +252,49 @@ module curved_front_skin() {
 
 module vent_hex_hole(h) {
     cylinder(h = h, r = vent_hex_r, $fn = 6, center = true);
+}
+
+module led_board_mount() {
+    inner_front_z = front_shell_depth / 2 - wall;
+    slot_w = led_board_w + 2 * led_mount_fit_clearance;
+    slot_h = led_board_thickness + 2 * led_mount_fit_clearance;
+    z_front = inner_front_z - led_mount_front_setback;
+    z_back = z_front - led_mount_channel_length;
+    z_mid = (z_front + z_back) / 2;
+    shelf_top_y = ir_offset_y - slot_h / 2;
+    shelf_mid_y = shelf_top_y - led_mount_shelf_thickness / 2;
+
+    // Base shelf
+    translate([ir_offset_x, shelf_mid_y, z_mid])
+        cube([
+            slot_w + 2 * led_mount_rail_thickness,
+            led_mount_shelf_thickness,
+            led_mount_channel_length
+        ], center = true);
+
+    // Side rails and upper capture lips create a drawer-like slide channel.
+    for (sx = [-1, 1]) {
+        rail_x = ir_offset_x + sx * (slot_w / 2 + led_mount_rail_thickness / 2);
+
+        translate([rail_x, shelf_top_y + led_mount_rail_height / 2, z_mid])
+            cube([
+                led_mount_rail_thickness,
+                led_mount_rail_height,
+                led_mount_channel_length
+            ], center = true);
+
+        lip_x = ir_offset_x + sx * (slot_w / 2 - led_mount_capture_lip_w / 2);
+        translate([lip_x, shelf_top_y + led_mount_rail_height - led_mount_capture_lip_h / 2, z_mid])
+            cube([
+                led_mount_capture_lip_w,
+                led_mount_capture_lip_h,
+                led_mount_channel_length
+            ], center = true);
+    }
+
+    // Rear detent bump helps retain the board once fully seated.
+    translate([ir_offset_x, shelf_top_y + led_mount_detent_h / 2, z_back + led_mount_detent_t / 2])
+        cube([slot_w, led_mount_detent_h, led_mount_detent_t], center = true);
 }
 
 module preview_clip() {
@@ -332,77 +424,81 @@ module mating_preview() {
 //////////////////////////////
 
 module front_shell() {
-    difference() {
-        union() {
-            rounded_prism(enclosure_width, enclosure_height, front_shell_depth, corner_radius, center = true);
-            curved_front_skin();
+    union() {
+        difference() {
+            union() {
+                rounded_prism(enclosure_width, enclosure_height, front_shell_depth, corner_radius, center = true);
+                curved_front_skin();
 
-            // Male lip for front/back interface
-            translate([0, 0, -front_shell_depth / 2 - lip_depth / 2 + feature_attach_eps])
-                ring_prism(
-                    lip_outer_w,
-                    lip_outer_h,
-                    lip_inner_w,
-                    lip_inner_h,
-                    lip_depth,
-                    max(corner_radius - wall - lip_margin, 1),
-                    max(corner_radius - wall - lip_margin - lip_thickness, 0.8),
+                // Male lip for front/back interface
+                translate([0, 0, -front_shell_depth / 2 - lip_depth / 2 + feature_attach_eps])
+                    ring_prism(
+                        lip_outer_w,
+                        lip_outer_h,
+                        lip_inner_w,
+                        lip_inner_h,
+                        lip_depth,
+                        max(corner_radius - wall - lip_margin, 1),
+                        max(corner_radius - wall - lip_margin - lip_thickness, 0.8),
+                        center = true
+                    );
+            }
+
+            // Hollow interior: keep the front face closed and the rear side open for internal routing
+            translate([0, 0, -wall / 2 - feature_attach_eps])
+                rounded_prism(
+                    enclosure_width - 2 * wall,
+                    enclosure_height - 2 * wall,
+                    front_shell_depth - wall + 2 * feature_attach_eps,
+                    max(corner_radius - wall, 1),
                     center = true
                 );
+
+            // Ensure rear pass-through remains open for camera/IR routing
+            translate([0, 0, -front_shell_depth / 2 - lip_depth / 2 + feature_attach_eps])
+                rounded_prism(
+                    lip_inner_w - 2 * fit_clearance,
+                    lip_inner_h - 2 * fit_clearance,
+                    lip_depth + wall + 0.6,
+                    max(corner_radius - wall - lip_margin - lip_thickness - fit_clearance, 0.8),
+                    center = true
+                );
+
+            // Camera and chamfered front opening
+            translate([cam_offset_x, cam_offset_y, front_shell_depth / 2 - wall - 0.1])
+                cylinder(d = cam_hole, h = wall + 0.3, center = false, $fn = 72);
+            translate([cam_offset_x, cam_offset_y, front_shell_depth / 2 - cam_chamfer_depth])
+                cylinder(d1 = cam_hole, d2 = cam_chamfer_d, h = cam_chamfer_depth + 0.1, center = false, $fn = 72);
+
+            // IR opening
+            translate([ir_offset_x, ir_offset_y, front_shell_depth / 2 - wall - 0.1])
+                cylinder(d = ir_diameter, h = wall + 0.3, center = false, $fn = 48);
+
+            // Alignment pockets
+            alignment_tab_positions()
+                translate([0, 0, -front_shell_depth / 2 - align_tab_depth / 2 + 0.1])
+                    cube([
+                        align_tab_w + 2 * fit_clearance,
+                        align_tab_h + 2 * fit_clearance,
+                        align_tab_depth + 0.2
+                    ], center = true);
+
+            // Snap slots to receive back tabs
+            snap_positions()
+                translate([0, 0, -front_shell_depth / 2 - snap_tab_l / 2 + 0.1])
+                    cube([
+                        snap_tab_w + 2 * fit_clearance,
+                        snap_tab_t + 2 * fit_clearance,
+                        snap_tab_l + 0.2
+                    ], center = true);
+
+            // Through-holes for screws
+            screw_positions()
+                translate([0, 0, -front_shell_depth / 2 - 0.1])
+                    cylinder(d = screw_hole_d + 0.2, h = wall + lip_depth + 0.4, center = false, $fn = 36);
         }
 
-        // Hollow interior: keep the front face closed and the rear side open for internal routing
-        translate([0, 0, -wall / 2 - feature_attach_eps])
-            rounded_prism(
-                enclosure_width - 2 * wall,
-                enclosure_height - 2 * wall,
-                front_shell_depth - wall + 2 * feature_attach_eps,
-                max(corner_radius - wall, 1),
-                center = true
-            );
-
-        // Ensure rear pass-through remains open for camera/IR routing
-        translate([0, 0, -front_shell_depth / 2 - lip_depth / 2 + feature_attach_eps])
-            rounded_prism(
-                lip_inner_w - 2 * fit_clearance,
-                lip_inner_h - 2 * fit_clearance,
-                lip_depth + wall + 0.6,
-                max(corner_radius - wall - lip_margin - lip_thickness - fit_clearance, 0.8),
-                center = true
-            );
-
-        // Camera and chamfered front opening
-        translate([cam_offset_x, cam_offset_y, front_shell_depth / 2 - wall - 0.1])
-            cylinder(d = cam_hole, h = wall + 0.3, center = false, $fn = 72);
-        translate([cam_offset_x, cam_offset_y, front_shell_depth / 2 - cam_chamfer_depth])
-            cylinder(d1 = cam_hole, d2 = cam_chamfer_d, h = cam_chamfer_depth + 0.1, center = false, $fn = 72);
-
-        // IR opening
-        translate([ir_offset_x, ir_offset_y, front_shell_depth / 2 - wall - 0.1])
-            cylinder(d = ir_diameter, h = wall + 0.3, center = false, $fn = 48);
-
-        // Alignment pockets
-        alignment_tab_positions()
-            translate([0, 0, -front_shell_depth / 2 - align_tab_depth / 2 + 0.1])
-                cube([
-                    align_tab_w + 2 * fit_clearance,
-                    align_tab_h + 2 * fit_clearance,
-                    align_tab_depth + 0.2
-                ], center = true);
-
-        // Snap slots to receive back tabs
-        snap_positions()
-            translate([0, 0, -front_shell_depth / 2 - snap_tab_l / 2 + 0.1])
-                cube([
-                    snap_tab_w + 2 * fit_clearance,
-                    snap_tab_t + 2 * fit_clearance,
-                    snap_tab_l + 0.2
-                ], center = true);
-
-        // Through-holes for screws
-        screw_positions()
-            translate([0, 0, -front_shell_depth / 2 - 0.1])
-                cylinder(d = screw_hole_d + 0.2, h = wall + lip_depth + 0.4, center = false, $fn = 36);
+        led_board_mount();
     }
 }
 
@@ -417,8 +513,8 @@ module back_shell() {
             union() {
                 rounded_prism(enclosure_width, enclosure_height, back_shell_depth, corner_radius, center = true);
 
-                // Blink snap collar — shallow raised ring protruding outward from exterior back face
-                translate([0, 0, -back_shell_depth / 2 - blink_collar_h])
+                // Blink snap collar — centred on camera lens for best leverage support
+                translate([cam_offset_x, cam_offset_y, -back_shell_depth / 2 - blink_collar_h])
                     difference() {
                         cylinder(d = blink_collar_od, h = blink_collar_h + feature_attach_eps, center = false, $fn = 60);
                         cylinder(d = blink_bore_d,    h = blink_collar_h + feature_attach_eps + 0.1, center = false, $fn = 48);
@@ -448,26 +544,37 @@ module back_shell() {
                     center = true
                 );
 
-            // Blink snap bore — through back wall and collar
-            translate([0, 0, -back_shell_depth / 2 - blink_collar_h - feature_attach_eps])
+            // Blink snap bore — through back wall and collar (centred on camera lens)
+            translate([cam_offset_x, cam_offset_y, -back_shell_depth / 2 - blink_collar_h - feature_attach_eps])
                 cylinder(d = blink_bore_d, h = wall + blink_collar_h + 2 * feature_attach_eps, center = false, $fn = 48);
 
-            // Honeycomb vent field through back wall (excluded within blink_vent_clear_r of centre)
+            // Honeycomb vent field — offset toward Pi, excluded around Blink collar and camera bosses
             for (row = [0 : vent_rows - 1])
-                for (col = [0 : vent_cols - 1]) {
-                    x = (col - (vent_cols - 1) / 2) * vent_pitch_x + (row % 2) * vent_pitch_x / 2;
-                    y = (row - (vent_rows - 1) / 2) * vent_pitch_y;
-                    if (abs(x) < vent_region_w / 2 && abs(y) < vent_region_h / 2
-                            && (x*x + y*y) > blink_vent_clear_r * blink_vent_clear_r)
+                for (col = [0 : vent_cols - 1])
+                    let(
+                        x = vent_offset_x + (col - (vent_cols - 1) / 2) * vent_pitch_x + (row % 2) * vent_pitch_x / 2,
+                        y = (row - (vent_rows - 1) / 2) * vent_pitch_y,
+                        half = cam_mount_boss_spacing / 2,
+                        cr2 = vent_cam_clear_r * vent_cam_clear_r
+                    )
+                    if (abs(x - vent_offset_x) < vent_region_w / 2
+                            && abs(y) < vent_region_h / 2
+                            && ((x-cam_offset_x)*(x-cam_offset_x)+(y-cam_offset_y)*(y-cam_offset_y)) > blink_vent_clear_r * blink_vent_clear_r
+                            && ((x-(cam_offset_x+half))*(x-(cam_offset_x+half))+(y-(cam_offset_y+half))*(y-(cam_offset_y+half))) > cr2
+                            && ((x-(cam_offset_x+half))*(x-(cam_offset_x+half))+(y-(cam_offset_y-half))*(y-(cam_offset_y-half))) > cr2
+                            && ((x-(cam_offset_x-half))*(x-(cam_offset_x-half))+(y-(cam_offset_y+half))*(y-(cam_offset_y+half))) > cr2
+                            && ((x-(cam_offset_x-half))*(x-(cam_offset_x-half))+(y-(cam_offset_y-half))*(y-(cam_offset_y-half))) > cr2)
                         translate([x, y, -back_shell_depth / 2 + wall / 2])
                             vent_hex_hole(wall + 0.6);
-                }
         }
     }
 
     difference() {
         union() {
             back_shell_body();
+
+            // Camera mount bosses (4-point square, rise from back wall)
+            camera_mount_bosses();
 
             // Pi standoffs
             pi_standoff_positions()
@@ -518,11 +625,7 @@ module camera_bracket() {
 }
 
 module ir_mount() {
-    difference() {
-        rounded_prism(25, 20, 3, 2, center = true);
-        translate([0, 0, 0.2])
-            cylinder(d = ir_diameter, h = 4, center = true, $fn = 48);
-    }
+    led_board_mount();
 }
 
 module assembly_view() {

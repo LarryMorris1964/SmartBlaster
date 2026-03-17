@@ -21,10 +21,21 @@
 - [Official datasheet](https://www.raspberrypi.com/documentation/accessories/camera.html)
 
 
-# Camera Module Dimensions
+# Camera Module Dimensions (large lens module — mechanical drawing)
 
-- PCB: 32 × 32 mm
-- PCB depth: 14 mm
-- Lens diameter: 27 mm
-- Lens length (front glass → PCB front): 45 mm
-- Required clearance behind PCB: 14 mm
+| Dimension | Value | Source |
+|-----------|-------|--------|
+| Mounting plate | 37 × 37 mm square | drawing |
+| Mounting hole C-C spacing | 27 mm (both axes) | drawing (5 mm in from each edge) |
+| Mounting screw size | M2.5 (estimated) | drawing |
+| Rear barrel OD | 27 mm | drawing |
+| Front lens tip OD | 14 mm | drawing |
+| Total module depth | ~47 mm | drawing (10+4+5+4+4+11+... ≈ 47) |
+| Rear barrel length | 24 mm | drawing |
+| Middle section length | 11 mm | drawing |
+| Front section depth | ~10 mm | drawing |
+
+## Enclosure Impact
+- Front-face aperture needs to clear the 27 mm barrel where it passes through the wall
+- Camera boss pattern: 4× bosses at ±13.5 mm from lens centre in both X and Y
+| Standoff height (PCB to back wall) | 10 mm | drawing — rear board omitted; back wall of case serves that role |
