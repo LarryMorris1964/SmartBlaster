@@ -50,20 +50,28 @@ front_curve_height = 2.2;
 
 // Camera
 cam_diameter = 27;
-cam_clearance = 1;
+cam_clearance = 4;              // generous clearance — front aperture is a dust-cover hole only,
+                                // lens is fully secured to back shell; no front contact intended
 cam_hole = cam_diameter + cam_clearance;
-cam_offset_x = -18;
-cam_offset_y = 0;
+cam_offset_x = -35.0;           // top-left corner placement with >=5mm wall border to camera posts
+cam_offset_y = 15.0;
 cam_chamfer_d = cam_hole + 6;
 cam_chamfer_depth = 1.5;
 
-// Camera mount reinforcement — 4-boss square pattern around lens
-// Mounting hole C-C spacing from mechanical drawing: 27 mm (5 mm in from each edge of 37 mm plate)
-// Boss height 10 mm = standoff height shown in drawing (space for connectors/ribbon behind camera PCB)
+// Camera mount — back shell is the sole structural support for the lens.
+// Board sits on the 10mm posts; a raised square capture wall retains the PCB
+// at post-top height while a center floor cutout leaves cable room.
+// Front shell provides no lens support — it is a dust cover snapped on after calibration.
+cam_plate_size   = 37.0;        // mounting plate outer dimension
+cam_capture_inner = 32.4;       // clear interior span for camera PCB
+cam_capture_wall  = 2.0;        // raised retaining wall thickness
+cam_capture_h     = 2.0;        // retaining wall height above post tops
+cam_capture_floor_t = 1.0;      // floor thickness at post-top plane
+cam_capture_hole  = 30.0;       // central cable opening in capture floor
 cam_mount_boss_d = 8.0;
 cam_mount_boss_h = 10.0;
 cam_mount_screw_d = 2.2;
-cam_mount_boss_spacing = 27.0;      // measured from drawing: bolt C-C = 37mm plate - 2×5mm edge
+cam_mount_boss_spacing = 27.0;  // measured from drawing: bolt C-C = 37mm plate - 2×5mm edge
 
 // IR
 ir_diameter = 6;
@@ -106,40 +114,36 @@ snap_tab_l = 7;
 snap_bump = 0.7;
 snap_y_offset = mating_feature_y - align_tab_edge_inset;
 
-// Screw posts
-screw_post_d = 8;
-screw_post_h = 10;
-screw_hole_d = 2.6;
-screw_head_relief_d = 5.6;
-screw_head_relief_h = 2;
-screw_offset_x = enclosure_width / 2 - 10;  // tighter into corners to clear Pi standoffs
-screw_offset_y = enclosure_height / 2 - 10;
-
-// Blink camera snap-ring mount — shallow raised collar on exterior back face.
+// Blink camera snap-ring mount — collar now protrudes inward so exterior back stays flush.
 // Bore measured at approx 5/16"–3/8" (~8–9.5 mm); collar OD gives ~2.75 mm wall each side.
 blink_collar_od     = 14.0;   // raised collar outer diameter (mm)
 blink_bore_d        =  8.5;   // snap through-bore diameter (mm)
-blink_collar_h      =  2.0;   // collar height proud of back-face exterior (mm)
+blink_collar_h      =  2.0;   // collar height into enclosure interior from inner back wall (mm)
 blink_vent_clear_r  = 10.0;   // vent exclusion radius around mount centre (mm)
 
 // Pi standoffs (Zero 2 W)
 standoff_height = 6;
 standoff_radius = 3;
+pi_standoff_hole_d = 2.2;         // Pi mounting pilot for M2.5 screw into printed post
+pi_board_len = 65.0;              // Pi Zero 2 W board length (X when not rotated)
+pi_board_wid = 30.0;              // Pi Zero 2 W board width
 pi_mount_spacing_x = 58;
 pi_mount_spacing_y = 23;
-pi_mount_rotated = true;            // rotate 90 deg so long axis is in Y
-pi_offset_x = 30;                   // shifted under LED shelf side, clear of corner screw posts
-pi_offset_y = 0;
+pi_mount_rotated = false;           // keep long axis aligned with Pi board X before applying angle
+pi_mount_angle = 0;                 // landscape orientation
+pi_offset_x = 24;                   // bottom-right placement (SCAD axes)
+pi_offset_y = -22;
 
 // Honeycomb vents
 vent_hex_r = 2.8;
 vent_pitch_x = vent_hex_r * 3.0;
 vent_pitch_y = vent_hex_r * 2.6;
-vent_rows = 5;
-vent_cols = 9;
-vent_region_w = 58;
-vent_region_h = 34;
-vent_offset_x = 38;                 // shift vent field toward Pi side, left edge ~X+9, clear of camera bosses
+vent_rows = 11;                     // portrait field: many rows (Y), fewer columns (X)
+vent_cols = 4;
+vent_region_w = 22;                 // keep vent block narrow to preserve Pi post area on the right
+vent_region_h = 68;                 // nearly full usable inner height
+vent_offset_x = 30;                 // near Pi region (right side), similar X zone as earlier layout intent
+vent_offset_y = -8;                 // slight downward bias toward Pi heat source
 vent_cam_clear_r = 6.0;             // exclusion radius around each camera mount boss
 
 
@@ -193,38 +197,65 @@ module ring_prism(outer_w, outer_h, inner_w, inner_h, d, r_outer, r_inner, cente
     }
 }
 
-module screw_positions() {
-    for (sx = [-1, 1])
-        for (sy = [-1, 1])
-            translate([sx * screw_offset_x, sy * screw_offset_y, 0])
-                children();
-}
-
 module pi_standoff_positions() {
     pi_span_x = pi_mount_rotated ? pi_mount_spacing_y : pi_mount_spacing_x;
     pi_span_y = pi_mount_rotated ? pi_mount_spacing_x : pi_mount_spacing_y;
     for (sx = [-1, 1])
         for (sy = [-1, 1])
+            let(
+                local_x = sx * pi_span_x / 2,
+                local_y = sy * pi_span_y / 2,
+                world_x = pi_offset_x + local_x * cos(pi_mount_angle) - local_y * sin(pi_mount_angle),
+                world_y = pi_offset_y + local_x * sin(pi_mount_angle) + local_y * cos(pi_mount_angle)
+            )
             translate([
-                pi_offset_x + sx * pi_span_x / 2,
-                pi_offset_y + sy * pi_span_y / 2,
+                world_x,
+                world_y,
                 0
             ])
                 children();
 }
 
 module camera_mount_bosses() {
+    base_z = -back_shell_depth / 2 + wall - feature_attach_eps;
+
+    // 4-point boss cluster.
     for (sx = [-1, 1])
         for (sy = [-1, 1])
             translate([
                 cam_offset_x + sx * cam_mount_boss_spacing / 2,
                 cam_offset_y + sy * cam_mount_boss_spacing / 2,
-                -back_shell_depth / 2 + wall - feature_attach_eps
+                base_z
             ])
                 difference() {
                     cylinder(d = cam_mount_boss_d, h = cam_mount_boss_h + feature_attach_eps, center = false, $fn = 48);
                     cylinder(d = cam_mount_screw_d, h = cam_mount_boss_h + feature_attach_eps + 0.2, center = false, $fn = 32);
                 }
+
+    post_top_z = base_z + cam_mount_boss_h;
+    capture_outer = cam_capture_inner + 2 * cam_capture_wall;
+
+    // Raised 32x32 capture box (2mm wall, 2mm high) with a 30x30 center cutout in the floor.
+    // Positioned so the FLOOR TOP is flush with post-top height.
+    translate([cam_offset_x, cam_offset_y, post_top_z])
+        difference() {
+            union() {
+                // Capture floor slab
+                translate([0, 0, -cam_capture_floor_t / 2])
+                    cube([cam_capture_inner, cam_capture_inner, cam_capture_floor_t], center = true);
+
+                // Raised retaining walls
+                translate([0, 0, cam_capture_h / 2 - feature_attach_eps / 2])
+                    difference() {
+                        cube([capture_outer, capture_outer, cam_capture_h + feature_attach_eps], center = true);
+                        cube([cam_capture_inner, cam_capture_inner, cam_capture_h + feature_attach_eps + 0.2], center = true);
+                    }
+            }
+
+            // Cable/connector relief opening through the floor slab
+            translate([0, 0, -cam_capture_floor_t / 2])
+                cube([cam_capture_hole, cam_capture_hole, cam_capture_floor_t + 0.2], center = true);
+        }
 }
 
 module alignment_tab_positions() {
@@ -390,13 +421,8 @@ module back_attached_features_preview() {
             translate([0, 0, wall / 2 - feature_attach_eps])
                 cylinder(h = standoff_height + feature_attach_eps, r = standoff_radius, center = false, $fn = 40);
 
-    color([0.95, 0.55, 0.15, 0.9])
-        screw_positions()
-            translate([0, 0, wall / 2 - feature_attach_eps])
-                cylinder(h = screw_post_h + feature_attach_eps, d = screw_post_d, center = false, $fn = 48);
-
     color([0.25, 0.45, 0.9, 0.9])
-        translate([0, 0, -(wall / 2 + blink_collar_h)])
+        translate([cam_offset_x, cam_offset_y, wall / 2 - feature_attach_eps])
             difference() {
                 cylinder(d = blink_collar_od, h = blink_collar_h, center = false, $fn = 60);
                 cylinder(d = blink_bore_d,    h = blink_collar_h + 0.1, center = false, $fn = 48);
@@ -492,10 +518,6 @@ module front_shell() {
                         snap_tab_l + 0.2
                     ], center = true);
 
-            // Through-holes for screws
-            screw_positions()
-                translate([0, 0, -front_shell_depth / 2 - 0.1])
-                    cylinder(d = screw_hole_d + 0.2, h = wall + lip_depth + 0.4, center = false, $fn = 36);
         }
 
         led_board_mount();
@@ -513,8 +535,8 @@ module back_shell() {
             union() {
                 rounded_prism(enclosure_width, enclosure_height, back_shell_depth, corner_radius, center = true);
 
-                // Blink snap collar — centred on camera lens for best leverage support
-                translate([cam_offset_x, cam_offset_y, -back_shell_depth / 2 - blink_collar_h])
+                // Blink snap collar — centred on camera lens, protrudes inward for flush exterior back
+                translate([cam_offset_x, cam_offset_y, -back_shell_depth / 2 + wall - feature_attach_eps])
                     difference() {
                         cylinder(d = blink_collar_od, h = blink_collar_h + feature_attach_eps, center = false, $fn = 60);
                         cylinder(d = blink_bore_d,    h = blink_collar_h + feature_attach_eps + 0.1, center = false, $fn = 48);
@@ -581,11 +603,6 @@ module back_shell() {
                 translate([0, 0, -back_shell_depth / 2 + wall - feature_attach_eps])
                     cylinder(h = standoff_height + feature_attach_eps, r = standoff_radius, center = false, $fn = 40);
 
-            // Screw posts
-            screw_positions()
-                translate([0, 0, -back_shell_depth / 2 + wall - feature_attach_eps])
-                    cylinder(h = screw_post_h + feature_attach_eps, d = screw_post_d, center = false, $fn = 48);
-
             // Alignment tabs
             alignment_tab_positions()
                 translate([0, 0, back_shell_depth / 2 + align_tab_depth / 2 - feature_attach_eps])
@@ -601,13 +618,10 @@ module back_shell() {
                 }
         }
 
-        // Screw pilot holes and head relief
-        screw_positions()
+        // Pi mounting pilot holes through standoffs
+        pi_standoff_positions()
             translate([0, 0, -back_shell_depth / 2 + wall - feature_attach_eps - 0.1])
-                cylinder(d = screw_hole_d, h = screw_post_h + feature_attach_eps + 0.4, center = false, $fn = 36);
-        screw_positions()
-            translate([0, 0, back_shell_depth / 2 - screw_head_relief_h])
-                cylinder(d = screw_head_relief_d, h = screw_head_relief_h + 0.1, center = false, $fn = 48);
+                cylinder(d = pi_standoff_hole_d, h = standoff_height + feature_attach_eps + 0.4, center = false, $fn = 32);
     }
 }
 
