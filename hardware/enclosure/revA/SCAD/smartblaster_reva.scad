@@ -91,12 +91,12 @@ screw_head_relief_h = 2;
 screw_offset_x = enclosure_width / 2 - 14;
 screw_offset_y = enclosure_height / 2 - 14;
 
-// Blink-style flush snap-in wall-mount socket — see ../../lib/blink_mount_socket.scad
-// Override any parameter here if this project needs a non-default value.
-blink_socket_d   = 40.0;
-blink_snap_d     = 23.0;
-blink_snap_depth = 10.0;
-blink_stem_d     = 13.0;
+// Blink camera snap-ring mount — shallow raised collar on exterior back face.
+// Bore measured at approx 5/16"–3/8" (~8–9.5 mm); collar OD gives ~2.75 mm wall each side.
+blink_collar_od     = 14.0;   // raised collar outer diameter (mm)
+blink_bore_d        =  8.5;   // snap through-bore diameter (mm)
+blink_collar_h      =  2.0;   // collar height proud of back-face exterior (mm)
+blink_vent_clear_r  = 10.0;   // vent exclusion radius around mount centre (mm)
 
 // Pi standoffs (Zero 2 W)
 standoff_height = 6;
@@ -304,10 +304,10 @@ module back_attached_features_preview() {
                 cylinder(h = screw_post_h + feature_attach_eps, d = screw_post_d, center = false, $fn = 48);
 
     color([0.25, 0.45, 0.9, 0.9])
-        translate([0, 0, wall / 2 - feature_attach_eps])
+        translate([0, 0, -(wall / 2 + blink_collar_h)])
             difference() {
-                cylinder(d = blink_socket_d, h = blink_snap_depth + feature_attach_eps, center = false, $fn = 80);
-                cylinder(d = blink_snap_d,    h = blink_snap_depth + feature_attach_eps + 0.2, center = false, $fn = 80);
+                cylinder(d = blink_collar_od, h = blink_collar_h, center = false, $fn = 60);
+                cylinder(d = blink_bore_d,    h = blink_collar_h + 0.1, center = false, $fn = 48);
             };
 }
 
@@ -417,11 +417,11 @@ module back_shell() {
             union() {
                 rounded_prism(enclosure_width, enclosure_height, back_shell_depth, corner_radius, center = true);
 
-                // Blink socket ring boss (protrudes inward from back wall, no external protrusion)
-                translate([0, 0, -back_shell_depth / 2 + wall - feature_attach_eps])
+                // Blink snap collar — shallow raised ring protruding outward from exterior back face
+                translate([0, 0, -back_shell_depth / 2 - blink_collar_h])
                     difference() {
-                        cylinder(d = blink_socket_d, h = blink_snap_depth + feature_attach_eps, center = false, $fn = 80);
-                        cylinder(d = blink_snap_d,    h = blink_snap_depth + feature_attach_eps + 0.2, center = false, $fn = 80);
+                        cylinder(d = blink_collar_od, h = blink_collar_h + feature_attach_eps, center = false, $fn = 60);
+                        cylinder(d = blink_bore_d,    h = blink_collar_h + feature_attach_eps + 0.1, center = false, $fn = 48);
                     }
             }
 
@@ -448,20 +448,17 @@ module back_shell() {
                     center = true
                 );
 
-            // Blink socket entry bore through back wall (flush with exterior)
-            translate([0, 0, -back_shell_depth / 2 - feature_attach_eps])
-                cylinder(d = blink_socket_d, h = wall + 2 * feature_attach_eps, center = false, $fn = 80);
+            // Blink snap bore — through back wall and collar
+            translate([0, 0, -back_shell_depth / 2 - blink_collar_h - feature_attach_eps])
+                cylinder(d = blink_bore_d, h = wall + blink_collar_h + 2 * feature_attach_eps, center = false, $fn = 48);
 
-            // Ball-joint stem bore through back wall and socket ring
-            translate([0, 0, -back_shell_depth / 2 - feature_attach_eps])
-                cylinder(d = blink_stem_d, h = wall + blink_snap_depth + 2 * feature_attach_eps, center = false, $fn = 60);
-
-            // Honeycomb vent field through back wall
+            // Honeycomb vent field through back wall (excluded within blink_vent_clear_r of centre)
             for (row = [0 : vent_rows - 1])
                 for (col = [0 : vent_cols - 1]) {
                     x = (col - (vent_cols - 1) / 2) * vent_pitch_x + (row % 2) * vent_pitch_x / 2;
                     y = (row - (vent_rows - 1) / 2) * vent_pitch_y;
-                    if (abs(x) < vent_region_w / 2 && abs(y) < vent_region_h / 2)
+                    if (abs(x) < vent_region_w / 2 && abs(y) < vent_region_h / 2
+                            && (x*x + y*y) > blink_vent_clear_r * blink_vent_clear_r)
                         translate([x, y, -back_shell_depth / 2 + wall / 2])
                             vent_hex_hole(wall + 0.6);
                 }
