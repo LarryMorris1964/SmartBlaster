@@ -8,7 +8,7 @@
 //////////////////////////////
 
 // Options: "assembly", "front_shell", "back_shell", "camera_bracket", "ir_mount", "mating_preview"
-export_part = "assembly";
+export_part = "front_shell";
 
 // Fast-fit preview controls (used by "mating_preview")
 preview_gap = 0.8;
@@ -117,8 +117,8 @@ vent_region_h = 34;
 interface_w = enclosure_width - 2 * wall;
 interface_h = enclosure_height - 2 * wall;
 
-lip_outer_w = interface_w - 2 * lip_margin;
-lip_outer_h = interface_h - 2 * lip_margin;
+lip_outer_w = interface_w + 2 * feature_attach_eps;
+lip_outer_h = interface_h + 2 * feature_attach_eps;
 lip_inner_w = lip_outer_w - 2 * lip_thickness;
 lip_inner_h = lip_outer_h - 2 * lip_thickness;
 align_tab_y_offset = mating_feature_y - align_tab_edge_inset;
@@ -331,7 +331,7 @@ module front_shell() {
             curved_front_skin();
 
             // Male lip for front/back interface
-            translate([0, 0, -front_shell_depth / 2 - lip_depth / 2])
+            translate([0, 0, -front_shell_depth / 2 - lip_depth / 2 + feature_attach_eps])
                 ring_prism(
                     lip_outer_w,
                     lip_outer_h,
@@ -344,13 +344,23 @@ module front_shell() {
                 );
         }
 
-        // Hollow interior
-        translate([0, 0, wall])
+        // Hollow interior: keep the front face closed and the rear side open for internal routing
+        translate([0, 0, -wall / 2 - feature_attach_eps])
             rounded_prism(
                 enclosure_width - 2 * wall,
                 enclosure_height - 2 * wall,
-                front_shell_depth,
+                front_shell_depth - wall + 2 * feature_attach_eps,
                 max(corner_radius - wall, 1),
+                center = true
+            );
+
+        // Ensure rear pass-through remains open for camera/IR routing
+        translate([0, 0, -front_shell_depth / 2 - lip_depth / 2 + feature_attach_eps])
+            rounded_prism(
+                lip_inner_w - 2 * fit_clearance,
+                lip_inner_h - 2 * fit_clearance,
+                lip_depth + wall + 0.6,
+                max(corner_radius - wall - lip_margin - lip_thickness - fit_clearance, 0.8),
                 center = true
             );
 
