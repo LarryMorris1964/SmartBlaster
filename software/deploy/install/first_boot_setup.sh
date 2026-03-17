@@ -60,10 +60,10 @@ python3 -m venv "$TARGET_ROOT/.venv"
 "$TARGET_ROOT/.venv/bin/pip" install -e "$TARGET_ROOT"
 
 echo "[first-boot] Installing vision dependency stack..."
-SMARTBLASTER_VENV="$TARGET_ROOT/.venv" "$TARGET_ROOT/deploy/install/install_vision_stack.sh"
+SMARTBLASTER_VENV="$TARGET_ROOT/.venv" bash "$TARGET_ROOT/deploy/install/install_vision_stack.sh"
 
 echo "[first-boot] Installing and starting smartblaster.service..."
-"$TARGET_ROOT/deploy/install/install_service.sh"
+bash "$TARGET_ROOT/deploy/install/install_service.sh"
 
 echo "[first-boot] Complete."
 echo "Check service status with: systemctl status smartblaster.service"
