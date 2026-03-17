@@ -1,0 +1,392 @@
+//
+// SmartBlaster Rev A — Parametric OpenSCAD Model
+// Enclosure with snap-fit, alignment, vents, and hardware mounting features.
+//
+
+//////////////////////////////
+// EXPORT SELECTOR
+//////////////////////////////
+
+// Options: "assembly", "front_shell", "back_shell", "camera_bracket", "ir_mount"
+export_part = "assembly";
+
+
+//////////////////////////////
+// CORE PARAMETERS
+//////////////////////////////
+
+// Overall enclosure footprint
+enclosure_width = 120;
+enclosure_height = 80;
+corner_radius = 8;
+
+// Wall/interface
+wall = 2;
+fit_clearance = 0.3;
+
+// Depth stack (ADR 0003)
+target_internal_depth = 61;
+front_shell_depth = 20;
+back_shell_depth = target_internal_depth - (front_shell_depth - wall) + wall;
+
+// Front face shaping
+front_curve_height = 2.2;
+
+
+//////////////////////////////
+// FEATURE PARAMETERS
+//////////////////////////////
+
+// Camera
+cam_diameter = 27;
+cam_clearance = 1;
+cam_hole = cam_diameter + cam_clearance;
+cam_offset_x = 0;
+cam_offset_y = 0;
+cam_chamfer_d = cam_hole + 6;
+cam_chamfer_depth = 1.5;
+
+// IR
+ir_diameter = 6;
+ir_offset_x = 25;
+ir_offset_y = 0;
+
+// Lip/groove interface
+lip_margin = 5;
+lip_thickness = 1.8;
+lip_depth = 2.4;
+groove_depth = lip_depth + 0.4;
+
+// Alignment tabs
+align_tab_w = 8;
+align_tab_h = 4;
+align_tab_depth = 3;
+align_tab_y_offset = 20;
+
+// Snap-fit tabs and slots
+snap_tab_w = 10;
+snap_tab_t = 1.8;
+snap_tab_l = 7;
+snap_bump = 0.7;
+snap_y_offset = 18;
+
+// Screw posts
+screw_post_d = 8;
+screw_post_h = 10;
+screw_hole_d = 2.6;
+screw_head_relief_d = 5.6;
+screw_head_relief_h = 2;
+screw_offset_x = enclosure_width / 2 - 14;
+screw_offset_y = enclosure_height / 2 - 14;
+
+// Rear mounting boss (1/4-20 clearance)
+mount_boss_diameter = 18;
+mount_hole_diameter = 6.8;
+mount_boss_height = 6;
+
+// Pi standoffs (Zero 2 W)
+standoff_height = 6;
+standoff_radius = 3;
+pi_mount_spacing_x = 58;
+pi_mount_spacing_y = 23;
+
+// Honeycomb vents
+vent_hex_r = 2.8;
+vent_pitch_x = vent_hex_r * 3.0;
+vent_pitch_y = vent_hex_r * 2.6;
+vent_rows = 5;
+vent_cols = 9;
+vent_region_w = 58;
+vent_region_h = 34;
+
+
+//////////////////////////////
+// DERIVED INTERFACE GEOMETRY
+//////////////////////////////
+
+interface_w = enclosure_width - 2 * wall;
+interface_h = enclosure_height - 2 * wall;
+
+lip_outer_w = interface_w - 2 * lip_margin;
+lip_outer_h = interface_h - 2 * lip_margin;
+lip_inner_w = lip_outer_w - 2 * lip_thickness;
+lip_inner_h = lip_outer_h - 2 * lip_thickness;
+
+groove_outer_w = lip_outer_w + 2 * fit_clearance;
+groove_outer_h = lip_outer_h + 2 * fit_clearance;
+groove_inner_w = lip_inner_w - 2 * fit_clearance;
+groove_inner_h = lip_inner_h - 2 * fit_clearance;
+
+
+//////////////////////////////
+// HELPER GEOMETRY
+//////////////////////////////
+
+module rounded_rect_2d(w, h, r) {
+    rr = min(r, min(w, h) / 2 - 0.01);
+    hull() {
+        translate([ w / 2 - rr,  h / 2 - rr]) circle(r = rr, $fn = 36);
+        translate([-w / 2 + rr,  h / 2 - rr]) circle(r = rr, $fn = 36);
+        translate([ w / 2 - rr, -h / 2 + rr]) circle(r = rr, $fn = 36);
+        translate([-w / 2 + rr, -h / 2 + rr]) circle(r = rr, $fn = 36);
+    }
+}
+
+module rounded_prism(w, h, d, r, center = true) {
+    if (center)
+        translate([0, 0, -d / 2])
+            linear_extrude(height = d)
+                rounded_rect_2d(w, h, r);
+    else
+        linear_extrude(height = d)
+            rounded_rect_2d(w, h, r);
+}
+
+module ring_prism(outer_w, outer_h, inner_w, inner_h, d, r_outer, r_inner, center = true) {
+    difference() {
+        rounded_prism(outer_w, outer_h, d, r_outer, center = center);
+        rounded_prism(inner_w, inner_h, d + 0.2, r_inner, center = center);
+    }
+}
+
+module screw_positions() {
+    for (sx = [-1, 1])
+        for (sy = [-1, 1])
+            translate([sx * screw_offset_x, sy * screw_offset_y, 0])
+                children();
+}
+
+module pi_standoff_positions() {
+    for (sx = [-1, 1])
+        for (sy = [-1, 1])
+            translate([sx * pi_mount_spacing_x / 2, sy * pi_mount_spacing_y / 2, 0])
+                children();
+}
+
+module alignment_tab_positions() {
+    for (sy = [-1, 1])
+        translate([0, sy * align_tab_y_offset, 0])
+            children();
+}
+
+module snap_positions() {
+    for (sx = [-1, 1])
+        for (sy = [-1, 1])
+            translate([sx * (enclosure_width / 2 - wall - snap_tab_w / 2 - 0.6), sy * snap_y_offset, 0])
+                children();
+}
+
+module curved_front_skin() {
+    intersection() {
+        translate([0, 0, front_shell_depth / 2 - front_curve_height])
+            scale([enclosure_width / 2, enclosure_height / 2, front_curve_height])
+                sphere(r = 1, $fn = 96);
+        translate([0, 0, front_shell_depth / 2 - front_curve_height / 2])
+            cube([enclosure_width, enclosure_height, front_curve_height], center = true);
+    }
+}
+
+module vent_hex_hole(h) {
+    cylinder(h = h, r = vent_hex_r, $fn = 6, center = true);
+}
+
+
+//////////////////////////////
+// FRONT SHELL
+//////////////////////////////
+
+module front_shell() {
+    difference() {
+        union() {
+            rounded_prism(enclosure_width, enclosure_height, front_shell_depth, corner_radius, center = true);
+            curved_front_skin();
+
+            // Male lip for front/back interface
+            translate([0, 0, -front_shell_depth / 2 - lip_depth / 2])
+                ring_prism(
+                    lip_outer_w,
+                    lip_outer_h,
+                    lip_inner_w,
+                    lip_inner_h,
+                    lip_depth,
+                    max(corner_radius - wall - lip_margin, 1),
+                    max(corner_radius - wall - lip_margin - lip_thickness, 0.8),
+                    center = true
+                );
+        }
+
+        // Hollow interior
+        translate([0, 0, wall])
+            rounded_prism(
+                enclosure_width - 2 * wall,
+                enclosure_height - 2 * wall,
+                front_shell_depth,
+                max(corner_radius - wall, 1),
+                center = true
+            );
+
+        // Camera and chamfered front opening
+        translate([cam_offset_x, cam_offset_y, front_shell_depth / 2 - wall - 0.1])
+            cylinder(d = cam_hole, h = wall + 0.3, center = false, $fn = 72);
+        translate([cam_offset_x, cam_offset_y, front_shell_depth / 2 - cam_chamfer_depth])
+            cylinder(d1 = cam_hole, d2 = cam_chamfer_d, h = cam_chamfer_depth + 0.1, center = false, $fn = 72);
+
+        // IR opening
+        translate([ir_offset_x, ir_offset_y, front_shell_depth / 2 - wall - 0.1])
+            cylinder(d = ir_diameter, h = wall + 0.3, center = false, $fn = 48);
+
+        // Alignment pockets
+        alignment_tab_positions()
+            translate([0, 0, -front_shell_depth / 2 - align_tab_depth / 2 + 0.1])
+                cube([
+                    align_tab_w + 2 * fit_clearance,
+                    align_tab_h + 2 * fit_clearance,
+                    align_tab_depth + 0.2
+                ], center = true);
+
+        // Snap slots to receive back tabs
+        snap_positions()
+            translate([0, 0, -front_shell_depth / 2 - snap_tab_l / 2 + 0.1])
+                cube([
+                    snap_tab_w + 2 * fit_clearance,
+                    snap_tab_t + 2 * fit_clearance,
+                    snap_tab_l + 0.2
+                ], center = true);
+
+        // Through-holes for screws
+        screw_positions()
+            translate([0, 0, -front_shell_depth / 2 - 0.1])
+                cylinder(d = screw_hole_d + 0.2, h = wall + lip_depth + 0.4, center = false, $fn = 36);
+    }
+}
+
+
+//////////////////////////////
+// BACK SHELL
+//////////////////////////////
+
+module back_shell() {
+    difference() {
+        union() {
+            rounded_prism(enclosure_width, enclosure_height, back_shell_depth, corner_radius, center = true);
+
+            // Central rear mounting boss
+            translate([0, 0, -back_shell_depth / 2 - mount_boss_height])
+                cylinder(d = mount_boss_diameter, h = mount_boss_height, center = false, $fn = 72);
+
+            // Pi standoffs
+            pi_standoff_positions()
+                translate([0, 0, -back_shell_depth / 2 + wall])
+                    cylinder(h = standoff_height, r = standoff_radius, center = false, $fn = 40);
+
+            // Screw posts
+            screw_positions()
+                translate([0, 0, -back_shell_depth / 2 + wall])
+                    cylinder(h = screw_post_h, d = screw_post_d, center = false, $fn = 48);
+
+            // Alignment tabs
+            alignment_tab_positions()
+                translate([0, 0, back_shell_depth / 2 + align_tab_depth / 2])
+                    cube([align_tab_w, align_tab_h, align_tab_depth], center = true);
+
+            // Snap tabs with small latch bump
+            snap_positions()
+                union() {
+                    translate([0, 0, back_shell_depth / 2 + snap_tab_l / 2])
+                        cube([snap_tab_w, snap_tab_t, snap_tab_l], center = true);
+                    translate([0, 0, back_shell_depth / 2 + snap_tab_l - 0.55])
+                        cube([snap_tab_w, snap_tab_t + snap_bump, 1.1], center = true);
+                }
+        }
+
+        // Hollow interior
+        translate([0, 0, wall])
+            rounded_prism(
+                enclosure_width - 2 * wall,
+                enclosure_height - 2 * wall,
+                back_shell_depth,
+                max(corner_radius - wall, 1),
+                center = true
+            );
+
+        // Female groove matching the front lip
+        translate([0, 0, back_shell_depth / 2 - groove_depth / 2])
+            ring_prism(
+                groove_outer_w,
+                groove_outer_h,
+                groove_inner_w,
+                groove_inner_h,
+                groove_depth,
+                max(corner_radius - wall - lip_margin + fit_clearance, 1),
+                max(corner_radius - wall - lip_margin - lip_thickness - fit_clearance, 0.8),
+                center = true
+            );
+
+        // Screw pilot holes and head relief
+        screw_positions()
+            translate([0, 0, -back_shell_depth / 2 + wall - 0.1])
+                cylinder(d = screw_hole_d, h = screw_post_h + 0.4, center = false, $fn = 36);
+        screw_positions()
+            translate([0, 0, back_shell_depth / 2 - screw_head_relief_h])
+                cylinder(d = screw_head_relief_d, h = screw_head_relief_h + 0.1, center = false, $fn = 48);
+
+        // Through-hole for rear mounting boss
+        translate([0, 0, -back_shell_depth / 2 - mount_boss_height - 0.1])
+            cylinder(d = mount_hole_diameter, h = mount_boss_height + wall + 0.2, center = false, $fn = 64);
+
+        // Honeycomb vent field through back wall
+        for (row = [0 : vent_rows - 1])
+            for (col = [0 : vent_cols - 1]) {
+                x = (col - (vent_cols - 1) / 2) * vent_pitch_x + (row % 2) * vent_pitch_x / 2;
+                y = (row - (vent_rows - 1) / 2) * vent_pitch_y;
+                if (abs(x) < vent_region_w / 2 && abs(y) < vent_region_h / 2)
+                    translate([x, y, -back_shell_depth / 2 + wall / 2])
+                        vent_hex_hole(wall + 0.6);
+            }
+    }
+}
+
+
+//////////////////////////////
+// ACCESSORY PARTS
+//////////////////////////////
+
+module camera_bracket() {
+    difference() {
+        rounded_prism(40, 40, 3, 3, center = true);
+        translate([0, 0, 0.2])
+            cylinder(d = cam_hole, h = 4, center = true, $fn = 72);
+    }
+}
+
+module ir_mount() {
+    difference() {
+        rounded_prism(25, 20, 3, 2, center = true);
+        translate([0, 0, 0.2])
+            cylinder(d = ir_diameter, h = 4, center = true, $fn = 48);
+    }
+}
+
+module assembly_view() {
+    color("lightgray")
+        front_shell();
+    translate([0, 0, -(front_shell_depth / 2 + back_shell_depth / 2 + 6)])
+        color("gainsboro")
+            back_shell();
+}
+
+
+//////////////////////////////
+// EXPORT SWITCH
+//////////////////////////////
+
+if (export_part == "front_shell")
+    front_shell();
+else if (export_part == "back_shell")
+    back_shell();
+else if (export_part == "camera_bracket")
+    camera_bracket();
+else if (export_part == "ir_mount")
+    ir_mount();
+else
+    assembly_view();
