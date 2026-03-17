@@ -35,7 +35,7 @@ apt-get install -y --no-install-recommends \
   tesseract-ocr \
   libtesseract-dev \
   libleptonica-dev \
-  libatlas-base-dev
+  libopenblas-dev
 
 echo "[vision] Installing Python packages into venv..."
 "$SMARTBLASTER_VENV/bin/pip" install --upgrade pip
