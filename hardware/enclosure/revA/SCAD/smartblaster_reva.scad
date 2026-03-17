@@ -3,6 +3,8 @@
 // Enclosure with snap-fit, alignment, vents, and hardware mounting features.
 //
 
+use <../../lib/blink_mount_socket.scad>
+
 //////////////////////////////
 // EXPORT SELECTOR
 //////////////////////////////
@@ -89,13 +91,12 @@ screw_head_relief_h = 2;
 screw_offset_x = enclosure_width / 2 - 14;
 screw_offset_y = enclosure_height / 2 - 14;
 
-// Blink-style flush snap-in wall-mount socket
-// Dimensions reverse-engineered from sockel-blink-orig.3mf reference geometry
-// z=8 outerD=39.9  z=9-11 snapRing innerD=20 outerD=24  z=15 stemD=12.9
-blink_socket_d   = 40.0;  // entry bore OD through back wall (bracket collar)
-blink_snap_d     = 23.0;  // snap ring inner D (22mm measured + 0.5 clearance)
-blink_snap_depth = 10.0;  // depth socket ring protrudes inward from back wall
-blink_stem_d     = 13.0;  // ball-joint stem clearance bore
+// Blink-style flush snap-in wall-mount socket — see ../../lib/blink_mount_socket.scad
+// Override any parameter here if this project needs a non-default value.
+blink_socket_d   = 40.0;
+blink_snap_d     = 23.0;
+blink_snap_depth = 10.0;
+blink_stem_d     = 13.0;
 
 // Pi standoffs (Zero 2 W)
 standoff_height = 6;
