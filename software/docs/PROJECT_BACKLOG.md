@@ -4,19 +4,18 @@ This file is the running backlog for the project. Keep items here even when they
 
 ## Active Backlog
 
-### 1. Weekly Scheduling in Captive Portal
+### 1. Weekly Scheduling in Main Runtime
 
 Status: Planned
 
 Goals:
-- Add a setup UI for on/off time by day of week.
-- Support a quick option to apply the same on/off window to every day.
-- Persist schedule in setup state.
-- Feed schedule into runtime config.
-- Execute simple on/off automation at configured times.
+- Execute simple on/off automation at configured times inside the main runtime loop.
+- Support a per-day weekly schedule as the runtime source of truth.
+- Preserve a backward-compatible path from legacy daily on/off settings.
+- Keep any setup or admin surface limited to configuration, not schedule execution.
 
 Notes:
-- This replaces env-only fixed daily automation with a user-facing schedule.
+- The captive portal may collect or edit schedule values, but scheduling itself belongs to the main program.
 - Keep first version simple and deterministic.
 
 ### 2. Setup Validation Workflow (IR Capability Shakeout)

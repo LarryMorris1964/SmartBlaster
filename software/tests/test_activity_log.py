@@ -69,7 +69,7 @@ def test_schedule_event_default_source() -> None:
     ev = logs[0]
     assert ev["event"] == "schedule_event"
     assert ev["trigger"] == "cool_requested"
-    assert ev["source"] == "daily_schedule"
+    assert ev["source"] == "weekly_schedule"
 
 
 def test_schedule_event_custom_source() -> None:

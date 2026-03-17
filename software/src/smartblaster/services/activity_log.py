@@ -121,8 +121,8 @@ class ActivityLogger:
 
     # ── Scheduling ────────────────────────────────────────────────────────────
 
-    def schedule_event(self, *, trigger: str, source: str = "daily_schedule") -> None:
-        """Log a scheduling trigger (daily on/off, active-day guard, etc.)."""
+    def schedule_event(self, *, trigger: str, source: str = "weekly_schedule") -> None:
+        """Log a scheduling trigger emitted by the runtime scheduler."""
         self._log.info("schedule_event", trigger=trigger, source=source)
 
     def async_event(self, *, trigger: str, source: str, **extra: Any) -> None:

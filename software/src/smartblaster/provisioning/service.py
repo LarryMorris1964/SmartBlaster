@@ -165,6 +165,8 @@ class ProvisioningService:
             "camera_enabled": request.camera_enabled,
             "daily_on_time": request.daily_on_time,
             "daily_off_time": request.daily_off_time,
+            # The simple daily fields remain for backward compatibility and to preload the
+            # simple UI, but runtime scheduling is driven from the per-weekday map below.
             "solar_weekly_schedule": _normalize_weekly_schedule(request.solar_weekly_schedule),
             "target_temperature_c": request.target_temperature_c,
             "timezone": request.timezone,
@@ -219,6 +221,8 @@ def _validate_active_days(active_days: list[str]) -> None:
 def _normalize_weekly_schedule(schedule: dict[str, dict[str, str]] | None) -> dict[str, dict[str, str]]:
     if not schedule:
         return {}
+        # Persist the canonical schedule shape as explicit weekday entries. The simple UI
+        # also saves into this structure after copying one shared time across all days.
     normalized: dict[str, dict[str, str]] = {}
     for day, entry in schedule.items():
         normalized[str(day).strip().lower()] = {

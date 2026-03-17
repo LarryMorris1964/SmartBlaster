@@ -864,11 +864,14 @@ def create_provisioning_app(
             document.getElementById('disableCameraVerification').checked = !s.camera_enabled;
           }
 
-          // Daily schedule (Monday row drives all days until per-day details are opened)
+          // UI convenience mode: the simple schedule uses the Monday row as the shared
+          // value the user edits before it is copied into every weekday on save.
           if (s.daily_on_time) document.getElementById('sched_mon_on').value = s.daily_on_time;
           if (s.daily_off_time) document.getElementById('sched_mon_off').value = s.daily_off_time;
 
-          // Per-day schedule overrides
+          // Canonical persisted form: per-weekday schedule entries.
+          // Tuesday-Sunday are loaded from solar_weekly_schedule; Monday is preloaded from
+          // the legacy/simple daily fields so old saved state and the simple UI both work.
           const sched = s.solar_weekly_schedule || {};
           for (const day of ['tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
             const entry = sched[day];
@@ -899,6 +902,8 @@ def create_provisioning_app(
       }
 
       function propagateMonToOtherDays() {
+        // Simple-mode helper: copy Monday's values into every other weekday.
+        // This keeps the save payload in the same per-day shape used by advanced mode.
         const on = document.getElementById('sched_mon_on').value || '10:00';
         const off = document.getElementById('sched_mon_off').value || '15:00';
         for (const day of ['tue', 'wed', 'thu', 'fri', 'sat', 'sun']) {
@@ -908,6 +913,8 @@ def create_provisioning_app(
       }
 
       function buildWeeklySchedulePayload() {
+        // The backend always receives a full per-weekday schedule map, even when the user
+        // interacted only with the simple "same every day" controls.
         const schedule = {};
         for (const day of WEEK_DAYS) {
           schedule[day] = {
@@ -1051,6 +1058,8 @@ def create_provisioning_app(
 
       async function saveSetup() {
         if (!document.getElementById('perDayScheduleDetails').open) {
+          // If advanced mode is closed, treat the Monday row as the user's single
+          // schedule choice and expand it into explicit weekday entries before save.
           propagateMonToOtherDays();
         }
         const activeDays = WEEK_DAYS;

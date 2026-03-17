@@ -187,7 +187,7 @@ class SmartBlasterRuntime:
                 scheduled_event = self.event_source.poll()
                 if scheduled_event:
                     last_state = self._apply_event(
-                        scheduled_event, last_state=last_state, source="daily_schedule"
+                        scheduled_event, last_state=last_state, source="weekly_schedule"
                     )
 
                 external_event = self.ir.listen()
@@ -224,7 +224,8 @@ def _parse_active_days(active_days_csv: str) -> list[str]:
 
 
 def _build_weekly_schedule(cfg) -> dict[str, dict[str, str]]:
-    # If explicit per-day schedule exists, it is the source of truth.
+    # Canonical runtime schedule: explicit per-weekday entries. The setup UI's
+    # simple "same every day" mode is just a shortcut that writes this shape.
     if getattr(cfg, "solar_weekly_schedule", None):
         return dict(cfg.solar_weekly_schedule)
 

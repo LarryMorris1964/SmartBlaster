@@ -69,6 +69,8 @@ def _apply_setup_state_to_env(setup: dict[str, object]) -> None:
     if isinstance(camera_enabled, bool):
         os.environ.setdefault("SMARTBLASTER_CAMERA_ENABLED", "true" if camera_enabled else "false")
 
+    # The simple schedule UI still stores legacy daily_* fields for preload purposes,
+    # but runtime scheduling should prefer the explicit per-weekday schedule below.
     daily_on_time = setup.get("daily_on_time")
     if isinstance(daily_on_time, str) and _is_valid_hhmm(daily_on_time):
         os.environ.setdefault("SMARTBLASTER_DAILY_ON_TIME", daily_on_time)
@@ -77,6 +79,8 @@ def _apply_setup_state_to_env(setup: dict[str, object]) -> None:
     if isinstance(daily_off_time, str) and _is_valid_hhmm(daily_off_time):
         os.environ.setdefault("SMARTBLASTER_DAILY_OFF_TIME", daily_off_time)
 
+    # Canonical schedule source of truth: one entry per weekday. The portal's simple
+    # mode writes the same value into every day so runtime does not need a second path.
     weekly_schedule = setup.get("solar_weekly_schedule")
     if isinstance(weekly_schedule, dict) and weekly_schedule:
         os.environ.setdefault("SMARTBLASTER_SOLAR_WEEKLY_SCHEDULE_JSON", json.dumps(weekly_schedule))
