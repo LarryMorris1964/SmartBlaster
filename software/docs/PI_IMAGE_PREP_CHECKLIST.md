@@ -23,6 +23,7 @@ Target: Raspberry Pi OS Lite (64-bit)
 ```bash
 sudo apt-get update
 sudo apt-get -y upgrade
+sudo apt install git -y
 sudo reboot
 ```
 
@@ -37,7 +38,7 @@ sudo raspi-config
 1. Copy repo to Pi (or clone):
 
 ```bash
-git clone <your-smartblaster-repo-url> ~/SmartBlaster
+git clone https://github.com/LarryMorris1964/SmartBlaster.git ~/SmartBlaster
 cd ~/SmartBlaster/software
 ```
 
