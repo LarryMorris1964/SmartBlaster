@@ -10,7 +10,7 @@ Group=root
 WorkingDirectory=/opt/smartblaster/software
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=/etc/smartblaster.env
-ExecStart=${CODE_ROOT}/.venv/bin/python3 ${CODE_ROOT}/src/smartblaster/main.py --mode auto --state-file /var/lib/smartblaster/device_setup.json --setup-host 0.0.0.0 --setup-port 8080 --enable-ap-mode --ap-use-sudo --ap-start-script ${CODE_ROOT}/deploy/ap/start_ap_mode.sh --ap-stop-script ${CODE_ROOT}/deploy/ap/stop_ap_mode.sh
+ExecStart=$CODE_ROOT/.venv/bin/python3 $CODE_ROOT/src/smartblaster/main.py --mode auto --state-file /var/lib/smartblaster/device_setup.json --setup-host 0.0.0.0 --setup-port 8080 --enable-ap-mode --ap-use-sudo --ap-start-script $CODE_ROOT/deploy/ap/start_ap_mode.sh --ap-stop-script $CODE_ROOT/deploy/ap/stop_ap_mode.sh
 Restart=always
 RestartSec=3
 
