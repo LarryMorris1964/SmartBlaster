@@ -76,8 +76,8 @@ class GitHubAppUpdater:
     @classmethod
     def from_env(cls) -> "GitHubAppUpdater":
         import os
-
-        repo = os.getenv("SMARTBLASTER_UPDATE_REPO", "")
+        # Default to OEM repo unless overridden by env var
+        repo = os.getenv("SMARTBLASTER_UPDATE_REPO", "LarryMorris1964/SmartBlaster")
         return cls(repo=repo)
 
     def status(self) -> UpdateStatus:
@@ -155,7 +155,7 @@ class GitHubAppUpdater:
             "pip",
             "install",
             "--upgrade",
-            f"git+https://github.com/{self.repo}.git@{final_target}",
+            f"git+https://github.com/{self.repo}.git@{final_target}#subdirectory=software",
         ]
         completed = self._run_command(command)
         ok = completed.returncode == 0
