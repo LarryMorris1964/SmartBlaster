@@ -85,25 +85,48 @@ echo "[first-boot] Copying dnsmasq.conf for AP mode..."
 cp "$TARGET_ROOT/deploy/ap/dnsmasq.conf" /etc/dnsmasq.conf
 
 
+
+# Install and enable unblock-wifi.service to ensure WiFi is unblocked before networking
+echo "[first-boot] Installing unblock-wifi.service..."
+cp "$TARGET_ROOT/deploy/install/unblock-wifi.service" /etc/systemd/system/
+systemctl enable unblock-wifi.service
+
 # Install and enable restart-dnsmasq-after-hostapd.service to ensure dnsmasq starts after hostapd
 echo "[first-boot] Installing restart-dnsmasq-after-hostapd.service..."
 cp "$TARGET_ROOT/deploy/install/restart-dnsmasq-after-hostapd.service" /etc/systemd/system/
 systemctl enable restart-dnsmasq-after-hostapd.service
 
 
-# Install and enable static-ip-wlan0.service to assign static IP to wlan0 for AP mode
-echo "[first-boot] Installing static-ip-wlan0.service..."
+
+# Always copy, enable, and start static-ip-wlan0.service to assign static IP to wlan0 for AP mode
+echo "[first-boot] Installing and enabling static-ip-wlan0.service..."
 cp "$TARGET_ROOT/deploy/install/static-ip-wlan0.service" /etc/systemd/system/
+systemctl daemon-reload
 systemctl enable static-ip-wlan0.service
+systemctl restart static-ip-wlan0.service
 
 echo "[first-boot] Complete."
 echo "Check service status with: systemctl status smartblaster.service"
 
-# Ensure rfkill unblock wlan is present in rc.local to prevent WiFi soft block on reboot
+
+# Ensure /etc/rc.local exists and contains rfkill unblock wifi for robust WiFi unblock
 RC_LOCAL=/etc/rc.local
-if ! grep -q 'rfkill unblock wlan' "$RC_LOCAL" 2>/dev/null; then
-  echo "[first-boot] Adding 'rfkill unblock wlan' to $RC_LOCAL ..."
-  sudo sed -i '/^exit 0/i rfkill unblock wlan' "$RC_LOCAL"
+if [[ ! -f "$RC_LOCAL" ]]; then
+  echo "[first-boot] Creating $RC_LOCAL with rfkill unblock wifi ..."
+  sudo tee "$RC_LOCAL" > /dev/null <<'EOF'
+#!/bin/bash
+rfkill unblock wifi
+exit 0
+EOF
+  sudo chmod +x "$RC_LOCAL"
+  sudo systemctl enable rc-local || true
+else
+  if ! grep -q 'rfkill unblock wifi' "$RC_LOCAL" 2>/dev/null; then
+    echo "[first-boot] Adding 'rfkill unblock wifi' to $RC_LOCAL ..."
+    sudo sed -i '/^exit 0/i rfkill unblock wifi' "$RC_LOCAL"
+  fi
+  sudo chmod +x "$RC_LOCAL"
+  sudo systemctl enable rc-local || true
 fi
 
 # Ensure static IP for wlan0 in /etc/dhcpcd.conf
