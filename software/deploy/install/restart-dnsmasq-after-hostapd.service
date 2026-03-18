@@ -1,0 +1,12 @@
+[Unit]
+Description=Restart dnsmasq after hostapd to ensure wlan0 exists
+After=hostapd.service
+Requires=hostapd.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart dnsmasq
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
