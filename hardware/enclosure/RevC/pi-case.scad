@@ -104,6 +104,31 @@ module bolt_pads(pad_h){
   }
 }
 
+module camera_mount_posts(){
+  center = camera_center();
+  spacing = camera_post_spacing();
+  for(dx=[-spacing/2, spacing/2])
+  for(dy=[-spacing/2, spacing/2]) {
+    intersection() {
+      translate([center[0] + dx, center[1] + dy, 0])
+        difference() {
+          union() {
+            cylinder(d=3*bolt_pad_d, h=wall, $fn=40);
+            translate([0,0,wall])
+              cylinder(d1=bolt_pad_d*2, d2=bolt_pad_d, h=post_t/3, $fn=40);
+            translate([0,0,wall+post_t/3])
+              cylinder(d=bolt_pad_d, h=post_t, $fn=40);
+          }
+          // Subtract bolt hole through the entire lower case
+          cylinder(d=bolt_d, h=lower_case_t+2, $fn=40);
+          // Hex recess for captive nut at the bottom
+          cylinder(d=bolt_nut_d, h=bolt_d, $fn=6);
+        }
+      fillet_box([board_w+2*(wall+wall_pad), case_depth+2*(wall+wall_pad), post_t], fo);
+    }
+  }
+}
+
 module front_edge_wall_cuts(){
   for(mod = front()){
     translate([mod[XOFF]-mod[WIDTH]/2, 
@@ -270,8 +295,11 @@ module upper_case(){
   }
 }
 
-
-lower_case_with_vents();
+// Place camera standoffs outside the lower_case void subtraction
+union() {
+  lower_case_with_vents();
+  camera_mount_posts();
+}
 
 translate([0,-5,0])
 upper_case();
