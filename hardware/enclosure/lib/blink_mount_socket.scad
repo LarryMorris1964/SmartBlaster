@@ -1,3 +1,59 @@
+// ------------------------------------------------------------
+// SIMPLE TEST OBJECT: Render a standalone Blink mount socket at origin for rapid iteration/printing
+// Comment out or remove before merging into production case
+if ($preview || $test) {
+    blink_mount_socket();
+}
+// ------------------------------------------------------------
+// BLINK MOUNT SOCKET MODULE (2026-03-29)
+//   Annular collar: 23mm OD
+//   Central hole:   16.3mm ID (through)
+//   Snap-collar:    16.1mm ID (at outermost end)
+//   All units mm. Adjust heights as needed for your shell.
+// ------------------------------------------------------------
+
+module blink_mount_socket(
+    collar_od = 23.0,         // outer diameter of collar
+    total_h = 3.0,            // total height of socket
+    lip_thickness = 1.0,      // thickness of snap-catch lip (axial)
+    bore_id = 16.3,           // main bore diameter (below lip)
+    lip_id = 16.1,            // snap-catch lip diameter (at top)
+    eps = 0.02,
+    fn_collar = 64,
+    fn_bore = 48
+) {
+    /*
+      Z=0 is the base of the collar (exterior wall face).
+      The body is a single can: 23mm OD, total_h tall.
+      The main bore (16.3mm) goes from bottom up to (total_h - lip_thickness).
+      The lip bore (16.1mm) goes all the way through, leaving a ring at the top.
+    */
+    difference() {
+        // Solid can
+        cylinder(d = collar_od, h = total_h, center = false, $fn = fn_collar);
+        // Main bore (large)
+        translate([0,0,0])
+            cylinder(d = bore_id, h = total_h - lip_thickness + eps, center = false, $fn = fn_bore);
+        // Lip bore (small, all the way through)
+        translate([0,0,0])
+            cylinder(d = lip_id, h = total_h + 2*eps, center = false, $fn = fn_bore);
+    }
+}
+//   Prusa_snap_ring_diameter  = 16.3; // mm (snap-ring outer diameter, corrected to physical measurement)
+// ------------------------------------------------------------
+// PRUSA STL-DERIVED DIMENSIONS (Prusa_xxx, as measured)
+//   Prusa_depth = 5.38; // mm (hole depth from Prusa design)
+//   Prusa_snap_ring_thickness = 3.4; // mm (snap-ring/latch thickness)
+//   // Add more Prusa_xxx values as you measure them
+// ------------------------------------------------------------
+// ------------------------------------------------------------
+// SUNLU STL-DERIVED DIMENSIONS (Sunlu_xxx, as measured)
+//   Sunlu_depth = 5.1; // mm (hole depth from Sunlu design)
+//   Sunlu_snap_ring_thickness = 2.0; // mm (snap-ring/latch thickness)
+//   Sunlu_snap_ring_diameter  = 35.4; // mm (snap-ring outer diameter)
+//   Sunlu_inner_cylinder_diameter = 33.4; // mm (inner cylinder diameter under snap-ring)
+//   // Add more Sunlu_xxx values as you measure them
+// ------------------------------------------------------------
 // ============================================================
 // blink_mount_socket.scad
 // Reusable Blink camera snap-ring mount — shallow raised collar
@@ -50,6 +106,13 @@
 //   fn_ring     — $fn for the collar cylinders
 //   fn_bore     — $fn for the snap bore
 // ============================================================
+
+// ------------------------------------------------------------
+// MEASURED BLINK MOUNT DIMENSIONS (2026-03-29, user calipers)
+//   main_cylinder_d = 16.1;   // mm (main body diameter)
+//   snap_ring_d     = 16.3;   // mm (outer snap ring diameter)
+//   socket_depth    = 3.0;    // mm (total depth of socket)
+// ------------------------------------------------------------
 
 module blink_snap_collar(
     eps         = 0.02,
