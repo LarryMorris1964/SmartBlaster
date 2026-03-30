@@ -9,10 +9,14 @@ wall_pad = 0.25;
 fi = 3+wall_pad; // inner fillet
 bolt_d=2.75;
 
+
 board_w=86;
 board_d=57;
-board_d_extend=100;  //Design a deeper case to accomodate camera
+board_d_extend=100;  // Design a deeper case to accommodate camera
 board_t=1.6;
+
+// Function for total case depth (original + extension)
+function case_depth() = board_d + board_d_extend;
 
 bolt_off=3.5;
 x_interbolt=59;

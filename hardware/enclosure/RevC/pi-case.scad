@@ -10,9 +10,13 @@ use <fillets.scad>;
 use <pi3B+-info.scad>;
 
 // case sizes
+
 board_w=board()[W];
 board_d=board()[D];
 board_t=board()[T];
+
+// Use case_depth() from info file for overall case depth
+case_depth = case_depth();
 
 wall=wall();
 post_t=post_base_t()-board()[T];
@@ -37,21 +41,21 @@ module board_blank_flex(h=total_case_t){
   union(){
     difference(){
       fillet_box([board_w+2*wall+2*wall_pad, 
-                  board_d+2*wall+2*wall_pad, 
-                  wall], fo);
+          case_depth+2*wall+2*wall_pad, 
+          wall], fo);
       
       children();
     }
 
     difference(){
       fillet_box([board_w+2*wall+2*wall_pad, 
-                  board_d+2*wall+2*wall_pad, 
-                  h], fo);
+          case_depth+2*wall+2*wall_pad, 
+          h], fo);
       
       translate([wall, wall, -0.01])
         fillet_box([board_w+2*wall_pad, 
-                    board_d+2*wall_pad, 
-                    h-wall+0.02], fi);
+            case_depth+2*wall_pad, 
+            h-wall+0.02], fi); // hollow out the entire extended region
     }
   }
 }
@@ -95,8 +99,8 @@ module bolt_pads(pad_h){
     }
     
     fillet_box([board_w+2*(wall+wall_pad),
-                board_d+2*(wall+wall_pad),
-                pad_h], fo);
+          case_depth+2*(wall+wall_pad),
+          pad_h], fo);
   }
 }
 
@@ -205,8 +209,8 @@ module lower_case(){
       children();
     }
 
-    cube([board_w+2*(wall+wall_pad),
-          board_d+2*(wall+wall_pad),
+        cube([board_w+2*(wall+wall_pad),
+          case_depth+2*(wall+wall_pad),
           lower_case_t]);
   }
 }
@@ -226,8 +230,8 @@ module upper_case(){
 
       translate([0,0,lower_case_t])
         cube([board_w+2*(wall+wall_pad),
-              board_d+2*(wall+wall_pad),
-              upper_case_t]);
+          case_depth+2*(wall+wall_pad),
+          upper_case_t]);
     }
     
     difference(){

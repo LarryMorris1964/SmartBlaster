@@ -31,6 +31,8 @@ module upper_case_pegs(){
   board_w=board[W];
   board_d=board[D];
   board_t=board[T];
+  board_d_extend = is_undef(board_d_extend) ? 0 : board_d_extend;
+  case_depth = board_d + board_d_extend;
   
   post_t=post_base_t()-board_t;
 
@@ -41,22 +43,22 @@ module upper_case_pegs(){
   difference(){
     translate([-wall,-wall,0])
       fillet_box([board_w+4*wall+2*wall_pad, 
-                  board_d+4*wall+2*wall_pad, 
+                  case_depth+4*wall+2*wall_pad, 
                   total_case_t], fo+wall);
 
     translate([0,0,-0.01])
     fillet_box([board_w+2*wall+2*wall_pad, 
-                board_d+2*wall+2*wall_pad, 
+                case_depth+2*wall+2*wall_pad, 
                 200], fo);
 
-    for(y=[-wall-0.01, board_d+2*wall+2*wall_pad-0.01]){
+    for(y=[-wall-0.01, case_depth+2*wall+2*wall_pad-0.01]){
       translate([wall+wall_pad+5, y, -0.01])
         cube([board_w-10, wall+0.02, 200]);
     }
 
     for(x=[-wall-0.01, board_w+2*wall+2*wall_pad-0.01]){
       translate([x-wall/2, wall+wall_pad+1.5, -0.01])
-        cube([2*wall, board_d-3, 200]);
+        cube([2*wall, case_depth-3, 200]);
     }
   }
 }
