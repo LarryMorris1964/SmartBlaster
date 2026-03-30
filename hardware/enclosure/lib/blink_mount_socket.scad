@@ -31,9 +31,9 @@ module blink_mount_socket(
     difference() {
         // Solid can
         cylinder(d = collar_od, h = total_h, center = false, $fn = fn_collar);
-        // Main bore (large)
-        translate([0,0,0])
-            cylinder(d = bore_id, h = total_h - lip_thickness + eps, center = false, $fn = fn_bore);
+        // Main bore (large) — extend slightly below zero to ensure no base artifact
+        translate([0,0,-eps])
+            cylinder(d = bore_id, h = total_h - lip_thickness + 2*eps, center = false, $fn = fn_bore);
         // Lip bore (small, all the way through)
         translate([0,0,0])
             cylinder(d = lip_id, h = total_h + 2*eps, center = false, $fn = fn_bore);
