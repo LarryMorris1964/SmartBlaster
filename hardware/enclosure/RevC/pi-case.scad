@@ -9,6 +9,9 @@ use <fillets.scad>;
 // use <pi3A+-info.scad>;
 use <pi3B+-info.scad>;
 
+// Camera board cutout diameter
+camera_board_size = 38; // mm
+
 // case sizes
 
 board_w=board()[W];
@@ -249,49 +252,49 @@ module lower_case_with_vents(){
 module upper_case(){
   translate([0,0,total_case_t])
   rotate([180,0,0])
-  union(){
-    intersection(){
-      case_block();
-
-      translate([0,0,lower_case_t])
-        cube([board_w+2*(wall+wall_pad),
-          case_depth+2*(wall+wall_pad),
-          upper_case_t]);
-    }
-    
-    difference(){
-      upper_case_pegs();
-
-      translate([0,0,-0.01])
-      union(){
-        linear_extrude(height=total_case_t+0.2){
-          projection(cut=true)
-          translate([0,0,-total_case_t+0.1])
-            wall_cuts();
-        }
-
-        linear_extrude(height=lower_case_t+board_t){
-          projection(cut=true)
-          translate([0,0,-upper_case_t+0.1])
-            wall_cuts();
-        }
-
-        linear_extrude(height=lower_case_t+2*board_t+0.1){
-          projection(cut=true)
-          translate([0,0,-upper_case_t-board_t-0.01])
-            wall_cuts();
-        }
+  difference() {
+    union(){
+      intersection(){
+        case_block();
+        translate([0,0,lower_case_t])
+          cube([board_w+2*(wall+wall_pad),
+            case_depth+2*(wall+wall_pad),
+            upper_case_t]);
       }
-    }
-
-    for_bolts(){
-      translate([0,0,lower_case_t+0.8])
       difference(){
-        cylinder(d=bolt_pad_d-0.8, h=upper_case_t-0.8, $fn=40);
+        upper_case_pegs();
         translate([0,0,-0.01])
-          cylinder(d=bolt_d, h=upper_case_t, $fn=40);
+        union(){
+          linear_extrude(height=total_case_t+0.2){
+            projection(cut=true)
+            translate([0,0,-total_case_t+0.1])
+              wall_cuts();
+          }
+          linear_extrude(height=lower_case_t+board_t){
+            projection(cut=true)
+            translate([0,0,-upper_case_t+0.1])
+              wall_cuts();
+          }
+          linear_extrude(height=lower_case_t+2*board_t+0.1){
+            projection(cut=true)
+            translate([0,0,-upper_case_t-board_t-0.01])
+              wall_cuts();
+          }
+        }
+      }
+      for_bolts(){
+        translate([0,0,lower_case_t+0.8])
+        difference(){
+          cylinder(d=bolt_pad_d-0.8, h=upper_case_t-0.8, $fn=40);
+          translate([0,0,-0.01])
+            cylinder(d=bolt_d, h=upper_case_t, $fn=40);
+        }
       }
     }
+    // Camera lens cutout in upper case (subtract after rotation)
+    center = camera_center();
+    translate([center[0], center[1], total_case_t-upper_case_t-0.01])
+      cylinder(d=camera_board_size, h=upper_case_t+1, $fn=80);
   }
 }
 
@@ -315,6 +318,6 @@ difference() {
 }
 
 translate([0,-5,0])
-upper_case();
+  upper_case();
 
 //case_block();
