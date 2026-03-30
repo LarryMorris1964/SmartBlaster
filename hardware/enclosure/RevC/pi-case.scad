@@ -301,6 +301,20 @@ union() {
   camera_mount_posts();
 }
 
+// Subtract through-holes and hex voids for camera standoffs
+for(dx=[-camera_post_spacing()/2, camera_post_spacing()/2])
+for(dy=[-camera_post_spacing()/2, camera_post_spacing()/2]) {
+  center = camera_center();
+  translate([center[0] + dx, center[1] + dy, 0]) {
+    // Through-hole
+    difference() {
+      cylinder(d=bolt_d, h=lower_case_t+2, $fn=40);
+      // Hex recess for captive nut at the bottom
+      cylinder(d=bolt_nut_d, h=bolt_d, $fn=6);
+    }
+  }
+}
+
 translate([0,-5,0])
 upper_case();
 
