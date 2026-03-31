@@ -77,6 +77,16 @@ python3 -m venv "$TARGET_ROOT/.venv"
 echo "[first-boot] Installing vision dependency stack..."
 SMARTBLASTER_VENV="$TARGET_ROOT/.venv" bash "$TARGET_ROOT/deploy/install/install_vision_stack.sh"
 
+
+# Always copy development-mode smartblaster.env to /etc/smartblaster.env
+echo "[first-boot] Copying smartblaster.env to /etc/smartblaster.env (development mode)..."
+cp "$TARGET_ROOT/deploy/install/smartblaster.env" /etc/smartblaster.env
+# Verify that /etc/smartblaster.env exists before proceeding
+if [[ ! -f /etc/smartblaster.env ]]; then
+  echo "[ERROR] /etc/smartblaster.env was not created. Aborting setup to prevent service failure."
+  exit 1
+fi
+
 echo "[first-boot] Installing and starting smartblaster.service..."
 bash "$TARGET_ROOT/deploy/install/install_service.sh"
 
@@ -125,6 +135,7 @@ else
     echo "[first-boot] Adding 'rfkill unblock wifi' to $RC_LOCAL ..."
     sudo sed -i '/^exit 0/i rfkill unblock wifi' "$RC_LOCAL"
   fi
+  
   sudo chmod +x "$RC_LOCAL"
   sudo systemctl enable rc-local || true
 fi
