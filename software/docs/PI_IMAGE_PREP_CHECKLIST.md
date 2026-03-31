@@ -112,15 +112,16 @@ This ensures the WiFi interface is not blocked by software, which is required fo
 Add the following line to /etc/rc.local before 'exit 0' (for copy-paste):
 
 ```bash
+sudo touch /etc/rc.local
+sudo chmod +x /etc/rc.local
 sudo sed -i '/^exit 0/i rfkill unblock wlan' /etc/rc.local
 ```
 
 This will keep WiFi unblocked on every boot. (The install script should add this automatically, but verify if you have issues with WiFi being soft blocked after reboot.)
 
 3. After reboot, set timezone and locale if needed:
-
-```bash
-sudo raspi-config
+# Commenting out for now, since we should have taken care of all this above
+# sudo raspi-config
 ```
 
 
@@ -183,6 +184,7 @@ You should see `AP` listed in supported interface modes. If not, AP mode will no
 - Handy tools for copying files, etc
 	- Putty is an all-in-one tool for Pi https://www.circuitbasics.com/use-putty-to-access-the-raspberry-pi-terminal-from-a-computer/ 
 	- FileZilla makes transfer easy https://filezilla-project.org/
+	- WinSCP is another nice alternative
 - then configure Pi Connect https://connect.raspberrypi.com/devices 
 - SmartBlaster uses FastAPI + camera/IR services and does not require desktop UI.
 - `tflite-runtime` installation is best-effort because wheel availability depends on Python version and architecture.
@@ -199,5 +201,75 @@ After connecting to the SmartBlaster-SETUP WiFi, open a browser and go to:
 	http://192.168.4.1:8080
 
 This will bring up the SmartBlaster setup portal to complete device configuration.
+
+---
+
+
+## 7. Updating SmartBlaster Software on Raspberry Pi (Versioned Release Workflow)
+
+To update SmartBlaster on your Raspberry Pi using a versioned release (recommended for production and field devices):
+
+### A. On your development machine (create and push a version tag)
+
+1. Commit and push all changes to the main repository:
+
+	```bash
+	git add .
+	git commit -m "your message"
+	git push
+	```
+
+2. Create a new version tag (replace v1.2.3 with your version):
+
+	```bash
+	git tag v1.2.3
+	git push origin v1.2.3
+	```
+
+### B. On the Raspberry Pi (update to the new version)
+
+1. SSH into your Pi and go to the software directory:
+
+	```bash
+	ssh pi@<your-pi-hostname>
+	cd /opt/smartblaster/software
+	```
+
+2. Fetch tags and checkout the new version:
+
+	```bash
+	sudo git fetch --tags
+	sudo git checkout v1.2.3
+	```
+
+3. (Recommended) Update Python dependencies in the virtual environment:
+
+	```bash
+	source .venv/bin/activate
+	pip install --upgrade pip setuptools wheel
+	pip install -e .
+	deactivate
+	```
+
+4. Restart the SmartBlaster service to apply the update:
+
+	```bash
+	sudo systemctl restart smartblaster.service
+	```
+
+5. Check service and health endpoint:
+
+	```bash
+	systemctl status smartblaster.service
+	curl -fsS http://127.0.0.1:8080/health
+	```
+
+If you encounter issues, review logs with:
+
+```bash
+journalctl -u smartblaster.service -n 100 --no-pager
+```
+
+This versioned workflow ensures only tested, tagged releases are deployed to devices. For development, you may still use branch-based updates, but tags are recommended for all production/field updates.
 
 
