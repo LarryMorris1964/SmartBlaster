@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # Requires root. Adjust paths/interface as needed.
+sudo rfkill unblock wifi
 WLAN_IFACE="${WLAN_IFACE:-wlan0}"
 HOSTAPD_CONF="${HOSTAPD_CONF:-/opt/smartblaster/software/deploy/ap/hostapd.conf}"
 DNSMASQ_CONF="${DNSMASQ_CONF:-/opt/smartblaster/software/deploy/ap/dnsmasq.conf}"

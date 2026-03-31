@@ -40,6 +40,24 @@ An AI-assisted build diary lives in `docs/AI_DIARY.md`.
 
 A running project backlog lives in `docs/PROJECT_BACKLOG.md`.
 
+
+## Update System Default Repo (OEM/Fork Guidance)
+
+By default, SmartBlaster checks for updates from the OEM repo:
+
+	LarryMorris1964/SmartBlaster
+
+To use your own update repo (for forks/derivatives), set the environment variable in your systemd service or shell:
+
+```bash
+export SMARTBLASTER_UPDATE_REPO="yourusername/yourrepo"
+```
+Or edit the systemd service file to add:
+```
+Environment=SMARTBLASTER_UPDATE_REPO=yourusername/yourrepo
+```
+This will override the default and enable updates from your own repo.
+
 ## New Scaffolded Modules
 
 - `src/smartblaster/config.py` — runtime settings from environment variables

@@ -1,3 +1,19 @@
+// Camera mount parameters
+camera_board_size = 38; // mm
+camera_post_spacing = 28; // mm
+// Returns [center_x, center_y] for camera mount (relative to case origin)
+function camera_center() = [board_w/2 + wall() + wall_pad, board_d + board_d_extend/2 + wall() + wall_pad];
+// Camera standoff locations (returns array of [x, y] pairs)
+function camera_bolts() = [
+  let(center = camera_center(), spacing = camera_post_spacing())
+  [
+    [center[0] - spacing/2, center[1] - spacing/2],
+    [center[0] + spacing/2, center[1] - spacing/2],
+    [center[0] - spacing/2, center[1] + spacing/2],
+    [center[0] + spacing/2, center[1] + spacing/2]
+  ]
+];
+function camera_post_spacing() = camera_post_spacing;
 include <indexes.scad>;
 include <defaults.scad>;
 include <common-case-pegs.scad>;
@@ -12,7 +28,7 @@ bolt_d=2.75;
 
 board_w=86;
 board_d=57;
-board_d_extend=100;  // Design a deeper case to accommodate camera
+board_d_extend=50;  // Design a deeper case to accommodate camera
 board_t=1.6;
 
 // Function for total case depth (original + extension)
