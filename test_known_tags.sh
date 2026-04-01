@@ -6,28 +6,26 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 CODE_ROOT="/home/pi/SmartBlaster/software"
 SERVICE_NAME="smartblaster"
 TAGS=("0.1.3" "0.1.4")
+UPDATE_REPO="${SMARTBLASTER_UPDATE_REPO:-LarryMorris1964/SmartBlaster}"
+PY="$CODE_ROOT/.venv/bin/python3"
 
 cd "$REPO_DIR"
 
-echo "[tag-test] Fetching tags"
-git fetch origin --tags
+if [ ! -x "$PY" ]; then
+    echo "[tag-test] Creating service venv"
+    python3 -m venv --copies "$CODE_ROOT/.venv"
+fi
 
-echo "[tag-test] Stashing local changes (if any)"
-git stash push -u -m "before-known-tag-test" >/dev/null 2>&1 || true
+echo "[tag-test] Preparing pip in service venv"
+"$PY" -m pip install --upgrade pip setuptools wheel
 
 for TAG in "${TAGS[@]}"; do
     echo ""
     echo "[tag-test] ===== Testing tag $TAG ====="
 
-    git checkout --detach "tags/$TAG"
+    echo "[tag-test] Installing software from GitHub tag via pip"
+    "$PY" -m pip install --upgrade "git+https://github.com/${UPDATE_REPO}.git@${TAG}#subdirectory=software"
 
-    python3 -m venv --copies "$CODE_ROOT/.venv"
-    "$CODE_ROOT/.venv/bin/python" -m pip install --upgrade pip setuptools wheel
-    "$CODE_ROOT/.venv/bin/pip" install -r "$CODE_ROOT/requirements.txt"
-    "$CODE_ROOT/.venv/bin/pip" install -e "$CODE_ROOT"
-
-    sudo cp "$CODE_ROOT/deploy/systemd/smartblaster.service" /etc/systemd/system/smartblaster.service
-    sudo systemctl daemon-reload
     sudo systemctl reset-failed "$SERVICE_NAME"
     sudo systemctl restart "$SERVICE_NAME"
 
@@ -43,10 +41,5 @@ for TAG in "${TAGS[@]}"; do
     echo "[tag-test] Recent logs for $TAG"
     journalctl -u "$SERVICE_NAME" -n 40 --no-pager -l || true
 done
-
-echo ""
-echo "[tag-test] Restoring master"
-git checkout master
-git reset --hard origin/master
 
 echo "[tag-test] Done"
