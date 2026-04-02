@@ -100,10 +100,16 @@ def create_provisioning_app(
     reboot_action: Callable[[], None] | None = None,
 ) -> FastAPI:
     provisioning = service or ProvisioningService()
-    camera_setup = camera_setup_service or CameraSetupService(
-        camera=CameraService(),
-        reference_store=ReferenceImageStore(),
-    )
+    if camera_setup_service is None:
+        _portal_camera = CameraService()
+        _portal_camera.start()  # Start once; keep alive to avoid black warmup frames on each request.
+        camera_setup = CameraSetupService(
+            camera=_portal_camera,
+            reference_store=ReferenceImageStore(),
+            manage_camera_lifecycle=False,
+        )
+    else:
+        camera_setup = camera_setup_service
     updater = update_service or GitHubAppUpdater.from_env()
     rebooter = reboot_action or request_reboot
     app = FastAPI(title="SmartBlaster Provisioning", version="0.1.0")
