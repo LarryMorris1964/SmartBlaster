@@ -99,3 +99,21 @@ You should see `AP` listed in supported interface modes. If not, AP mode will no
 - SmartBlaster uses FastAPI + camera/IR services and does not require desktop UI.
 - `tflite-runtime` installation is best-effort because wheel availability depends on Python version and architecture.
 - First boot still enters setup mode until setup state is saved; Wi-Fi connectivity alone does not skip setup.
+
+## 7. Routine Update Workflow (After Initial Install)
+
+Use this for normal code changes so you do not need a long manual sequence each time:
+
+```bash
+cd ~/SmartBlaster/software
+./deploy.sh
+```
+
+What this does:
+
+- Pulls latest code with fast-forward only.
+- Ensures the service venv exists.
+- Reinstalls SmartBlaster package and dependencies into that venv.
+- Reinstalls systemd unit from repo, reloads daemon, and restarts service.
+
+Use deeper recovery steps only if this one-command flow fails.
