@@ -104,6 +104,7 @@ def create_provisioning_app(
         camera_setup = CameraSetupService(
             camera=CameraService(),
             reference_store=ReferenceImageStore(),
+            manage_camera_lifecycle=False,  # Keep camera alive; start() is lazy and idempotent.
         )
     else:
         camera_setup = camera_setup_service

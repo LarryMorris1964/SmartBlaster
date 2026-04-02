@@ -98,8 +98,7 @@ class CameraSetupService:
 
     def _capture_frame(self) -> bytes:
         with self._camera_access_lock:
-            if self.manage_camera_lifecycle:
-                self.camera.start()
+            self.camera.start()  # Idempotent: no-op if already running; lazy-starts if not.
             try:
                 frame = self.camera.capture_frame()
                 if frame is None:
