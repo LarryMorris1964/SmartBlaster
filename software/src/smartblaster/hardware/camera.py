@@ -18,21 +18,7 @@ class CameraService:
     def start(self) -> None:
         if self._camera is not None:
             return
-        # Try Pi camera (Picamera2) first — preferred on Raspberry Pi.
-        # OpenCV/V4L2 can open the Pi camera device but returns black frames
-        # during warmup, making it unreliable for live preview.
-        try:
-            from picamera2 import Picamera2  # type: ignore
-            camera = Picamera2()
-            config = camera.create_still_configuration()
-            camera.configure(config)
-            camera.start()
-            self._camera = camera
-            self._is_usb = False
-            return
-        except Exception:
-            pass
-        # Fallback: try USB camera (OpenCV) for non-Pi deployments
+        # Try USB camera (OpenCV) first — this project uses a telephoto USB camera.
         try:
             import cv2
             cam = cv2.VideoCapture(0)
@@ -41,9 +27,8 @@ class CameraService:
                 cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
                 cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
                 cam.set(cv2.CAP_PROP_FPS, 30)
-                # Allow several frames to discard black warmup frames
-                for _ in range(5):
-                    ret, frame = cam.read()
+                # Test grab to confirm camera is usable
+                ret, frame = cam.read()
                 if ret:
                     self._camera = cam
                     self._is_usb = True
@@ -52,8 +37,18 @@ class CameraService:
                     cam.release()
         except ImportError:
             pass
-        self._camera = None
-        self._is_usb = False
+        # Fallback: try Pi camera (Picamera2)
+        try:
+            from picamera2 import Picamera2  # type: ignore
+            camera = Picamera2()
+            config = camera.create_still_configuration()
+            camera.configure(config)
+            camera.start()
+            self._camera = camera
+            self._is_usb = False
+        except ImportError:
+            self._camera = None
+            self._is_usb = False
 
     def capture_frame(self) -> bytes | None:
         if self._camera is None:

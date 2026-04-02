@@ -50,6 +50,9 @@ class CameraSetupService:
 
     def preview_frame(self, profile_id: str, *, overlay: bool = True) -> bytes:
         frame = self._capture_frame()
+        if not overlay:
+            # Return raw captured frame directly — bypasses PIL processing for a reliable live view.
+            return frame
         _status, preview = self._analyze_frame(frame, profile_id=profile_id, overlay=overlay)
         return _encode_jpeg(preview)
 
