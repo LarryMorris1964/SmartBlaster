@@ -50,10 +50,14 @@ class CameraSetupService:
 
     def preview_frame(self, profile_id: str, *, overlay: bool = True) -> bytes:
         frame = self._capture_frame()
+        # Resize to 640x360 for fast network transfer — raw 1920x1080 JPEGs are too
+        # large to load within the 1-second live view refresh interval over the AP link.
+        img = Image.open(BytesIO(frame)).convert("RGB")
+        img = img.resize((640, 360), Image.LANCZOS)
         if not overlay:
-            # Return raw captured frame directly — bypasses PIL processing for a reliable live view.
-            return frame
+            return _encode_jpeg(img)
         _status, preview = self._analyze_frame(frame, profile_id=profile_id, overlay=overlay)
+        preview = preview.resize((640, 360), Image.LANCZOS)
         return _encode_jpeg(preview)
 
     def status(self, profile_id: str) -> CameraSetupStatus:
