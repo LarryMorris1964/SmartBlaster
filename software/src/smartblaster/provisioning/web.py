@@ -1135,25 +1135,17 @@ def create_provisioning_app(
         updateCameraSetupCallToAction();
       }
 
-      let liveViewActive = false;
+      let liveViewTimer = null;
 
       function refreshLiveView() {
-        if (!liveViewActive) return;
         const profileId = (selectedProfileId() || 'midea_kjr_12b_dp_t');
         const img = document.getElementById('modalPreview');
         const url = `/api/camera/preview.jpg?thermostat_profile_id=${encodeURIComponent(profileId)}&overlay=false&t=${Date.now()}`;
-        // Chain next refresh off load/error so we never cancel an in-flight request.
-        img.onload = () => {
-          img.onload = null;
-          img.onerror = null;
-          document.getElementById('modalPreviewMsg').textContent = '';
-          if (liveViewActive) setTimeout(refreshLiveView, 500);
-        };
         img.onerror = () => {
-          img.onload = null;
           img.onerror = null;
+          img.removeAttribute('src');
+          img.alt = 'Camera not available — check that the camera is connected.';
           document.getElementById('modalPreviewMsg').textContent = 'Camera not available. Check that the camera is connected to the device.';
-          if (liveViewActive) setTimeout(refreshLiveView, 2000);
         };
         img.src = url;
       }
@@ -1248,13 +1240,15 @@ def create_provisioning_app(
             clearInterval(previewTimer);
             previewTimer = null;
           }
-          liveViewActive = true;
           refreshLiveView();
+          if (!liveViewTimer) {
+            liveViewTimer = setInterval(refreshLiveView, 1000);
+          }
         } else {
-          liveViewActive = false;
-          const img = document.getElementById('modalPreview');
-          img.onload = null;
-          img.onerror = null;
+          if (liveViewTimer) {
+            clearInterval(liveViewTimer);
+            liveViewTimer = null;
+          }
           // Resume main panel camera timer if camera verification is enabled.
           updateCameraPanel();
         }
