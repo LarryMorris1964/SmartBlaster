@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=root
 Group=root
-WorkingDirectory=/opt/smartblaster/software
+WorkingDirectory=/home/pi/SmartBlaster/software
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/pi/SmartBlaster/software/.venv/bin/smartblaster-device --mode auto --state-file /var/lib/smartblaster/device_setup.json --setup-host 0.0.0.0 --setup-port 8080 --enable-ap-mode --ap-use-sudo --ap-start-script /home/pi/SmartBlaster/software/deploy/ap/start_ap_mode.sh --ap-stop-script /home/pi/SmartBlaster/software/deploy/ap/stop_ap_mode.sh
 Restart=always

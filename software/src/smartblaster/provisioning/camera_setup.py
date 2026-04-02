@@ -100,10 +100,38 @@ class CameraSetupService:
                 frame = self.camera.capture_frame()
                 if frame is None:
                     raise RuntimeError("camera did not return a frame")
+                # --- Debug: Save every captured frame to test_images/ ---
+                try:
+                    _save_debug_test_image(frame)
+                except Exception as ex:
+                    # Don't let debug save errors break capture
+                    pass
                 return frame
             finally:
                 if self.manage_camera_lifecycle:
                     self.camera.stop()
+
+
+def _save_debug_test_image(frame_bytes: bytes, folder: str = "data/test_images", max_images: int = 100):
+    """Save frame as test_imageNNN.jpg, incrementing and looping at max_images."""
+    from pathlib import Path
+    import threading
+    folder_path = Path(folder)
+    folder_path.mkdir(parents=True, exist_ok=True)
+    counter_file = folder_path / "counter.txt"
+    lock = threading.Lock()
+    with lock:
+        if counter_file.exists():
+            try:
+                n = int(counter_file.read_text().strip())
+            except Exception:
+                n = 1
+        else:
+            n = 1
+        img_path = folder_path / f"test_image{n:03d}.jpg"
+        img_path.write_bytes(frame_bytes)
+        n = n + 1 if n < max_images else 1
+        counter_file.write_text(str(n))
 
     def _analyze_frame(self, frame: bytes, *, profile_id: str, overlay: bool) -> tuple[CameraSetupStatus, Image.Image]:
         parser = self.parser_factory(profile_id)
