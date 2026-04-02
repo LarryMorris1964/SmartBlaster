@@ -56,10 +56,13 @@ class CameraService:
         with self._lock:
             if self._is_usb:
                 import cv2
+                # Flush buffered frames so we get the most current one.
+                # OpenCV buffers several frames when the camera stays open.
+                for _ in range(4):
+                    self._camera.grab()
                 ret, frame = self._camera.read()
                 if not ret or frame is None:
                     return None
-                # Encode as JPEG
                 ret, buf = cv2.imencode('.jpg', frame)
                 if not ret:
                     return None

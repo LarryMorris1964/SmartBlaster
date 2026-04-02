@@ -1240,7 +1240,7 @@ def create_provisioning_app(
           }
           refreshLiveView();
           if (!liveViewTimer) {
-            liveViewTimer = setInterval(refreshLiveView, 1000);
+            liveViewTimer = setInterval(refreshLiveView, 2000);
           }
         } else {
           if (liveViewTimer) {
