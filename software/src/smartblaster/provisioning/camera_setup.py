@@ -8,6 +8,7 @@ from io import BytesIO
 import json
 from pathlib import Path
 import re
+import threading
 from typing import Callable
 
 from PIL import Image, ImageDraw
@@ -44,6 +45,7 @@ class CameraSetupService:
         self.parser_factory = parser_factory
         self.reference_store = reference_store or ReferenceImageStore()
         self.manage_camera_lifecycle = manage_camera_lifecycle
+        self._camera_access_lock = threading.Lock()
 
     def preview_frame(self, profile_id: str, *, overlay: bool = True) -> bytes:
         frame = self._capture_frame()
@@ -91,16 +93,17 @@ class CameraSetupService:
         )
 
     def _capture_frame(self) -> bytes:
-        if self.manage_camera_lifecycle:
-            self.camera.start()
-        try:
-            frame = self.camera.capture_frame()
-            if frame is None:
-                raise RuntimeError("camera did not return a frame")
-            return frame
-        finally:
+        with self._camera_access_lock:
             if self.manage_camera_lifecycle:
-                self.camera.stop()
+                self.camera.start()
+            try:
+                frame = self.camera.capture_frame()
+                if frame is None:
+                    raise RuntimeError("camera did not return a frame")
+                return frame
+            finally:
+                if self.manage_camera_lifecycle:
+                    self.camera.stop()
 
     def _analyze_frame(self, frame: bytes, *, profile_id: str, overlay: bool) -> tuple[CameraSetupStatus, Image.Image]:
         parser = self.parser_factory(profile_id)
