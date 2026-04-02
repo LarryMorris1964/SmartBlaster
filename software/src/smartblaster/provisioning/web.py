@@ -101,12 +101,9 @@ def create_provisioning_app(
 ) -> FastAPI:
     provisioning = service or ProvisioningService()
     if camera_setup_service is None:
-        _portal_camera = CameraService()
-        _portal_camera.start()  # Start once; keep alive to avoid black warmup frames on each request.
         camera_setup = CameraSetupService(
-            camera=_portal_camera,
+            camera=CameraService(),
             reference_store=ReferenceImageStore(),
-            manage_camera_lifecycle=False,
         )
     else:
         camera_setup = camera_setup_service
