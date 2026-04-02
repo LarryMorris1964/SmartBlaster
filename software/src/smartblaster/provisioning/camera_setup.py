@@ -140,9 +140,10 @@ class CameraSetupService:
 
             if overlay and hasattr(parser, "debug_overlays"):
                 overlays = parser.debug_overlays(frame)  # type: ignore[attr-defined]
+                # Use original_bounds: full frame with boundary detection drawn on it.
+                # rois_selected is a normalized crop and is not suitable for portal preview.
                 preview = (
-                    overlays.get("rois_selected")
-                    or overlays.get("original_bounds")
+                    overlays.get("original_bounds")
                     or next(iter(overlays.values()), preview)
                 ).convert("RGB")
         except Exception as ex:

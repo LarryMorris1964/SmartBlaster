@@ -100,9 +100,12 @@ def create_provisioning_app(
     reboot_action: Callable[[], None] | None = None,
 ) -> FastAPI:
     provisioning = service or ProvisioningService()
+    _camera = CameraService()
+    _camera.start()  # Keep camera warm between preview requests to avoid per-request startup delay.
     camera_setup = camera_setup_service or CameraSetupService(
-        camera=CameraService(),
+        camera=_camera,
         reference_store=ReferenceImageStore(),
+        manage_camera_lifecycle=False,
     )
     updater = update_service or GitHubAppUpdater.from_env()
     rebooter = reboot_action or request_reboot
