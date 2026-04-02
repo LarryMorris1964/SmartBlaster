@@ -1138,7 +1138,7 @@ def create_provisioning_app(
       function refreshLiveView() {
         const profileId = (selectedProfileId() || 'midea_kjr_12b_dp_t');
         const img = document.getElementById('modalPreview');
-        const url = `/api/camera/preview.jpg?thermostat_profile_id=${encodeURIComponent(profileId)}&overlay=false&t=${Date.now()}`;
+        const url = `/api/camera/preview.jpg?thermostat_profile_id=${encodeURIComponent(profileId)}&overlay=true&t=${Date.now()}`;
         img.onerror = () => {
           img.onerror = null;
           img.removeAttribute('src');
