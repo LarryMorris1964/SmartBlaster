@@ -1135,10 +1135,13 @@ def create_provisioning_app(
         const img = document.getElementById('modalPreview');
         const url = `/api/camera/preview.jpg?thermostat_profile_id=${encodeURIComponent(profileId)}&overlay=false&t=${Date.now()}`;
         img.onerror = () => {
+          // Don't permanently remove src — just show error message and let timer retry.
           img.onerror = null;
-          img.removeAttribute('src');
-          img.alt = 'Camera not available — check that the camera is connected.';
           document.getElementById('modalPreviewMsg').textContent = 'Camera not available. Check that the camera is connected to the device.';
+        };
+        img.onload = () => {
+          img.onerror = null;
+          document.getElementById('modalPreviewMsg').textContent = '';
         };
         img.src = url;
       }
@@ -1228,13 +1231,22 @@ def create_provisioning_app(
           const copyStatus = document.getElementById('modalCopyStatus');
           copyStatus.style.display = 'none';
           copyStatus.textContent = '';
+          // Pause the main panel camera timer to avoid competing requests.
+          if (previewTimer) {
+            clearInterval(previewTimer);
+            previewTimer = null;
+          }
           refreshLiveView();
           if (!liveViewTimer) {
-            liveViewTimer = setInterval(refreshLiveView, 1000);
+            liveViewTimer = setInterval(refreshLiveView, 2000);
           }
-        } else if (liveViewTimer) {
-          clearInterval(liveViewTimer);
-          liveViewTimer = null;
+        } else {
+          if (liveViewTimer) {
+            clearInterval(liveViewTimer);
+            liveViewTimer = null;
+          }
+          // Resume main panel camera timer if camera verification is enabled.
+          updateCameraPanel();
         }
       });
 
