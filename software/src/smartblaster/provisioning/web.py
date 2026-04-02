@@ -279,7 +279,14 @@ def create_provisioning_app(
             content = camera_setup.preview_frame(thermostat_profile_id, overlay=overlay)
         except Exception as ex:
             raise HTTPException(status_code=503, detail=str(ex)) from ex
-        return Response(content=content, media_type="image/jpeg")
+        return Response(
+            content=content,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            },
+        )
 
     @app.post("/api/camera/reference-capture")
     def capture_reference(payload: CameraReferencePayload) -> dict[str, object]:
@@ -1128,20 +1135,25 @@ def create_provisioning_app(
         updateCameraSetupCallToAction();
       }
 
-      let liveViewTimer = null;
+      let liveViewActive = false;
 
       function refreshLiveView() {
+        if (!liveViewActive) return;
         const profileId = (selectedProfileId() || 'midea_kjr_12b_dp_t');
         const img = document.getElementById('modalPreview');
         const url = `/api/camera/preview.jpg?thermostat_profile_id=${encodeURIComponent(profileId)}&overlay=false&t=${Date.now()}`;
-        img.onerror = () => {
-          // Don't permanently remove src — just show error message and let timer retry.
-          img.onerror = null;
-          document.getElementById('modalPreviewMsg').textContent = 'Camera not available. Check that the camera is connected to the device.';
-        };
+        // Chain next refresh off load/error so we never cancel an in-flight request.
         img.onload = () => {
+          img.onload = null;
           img.onerror = null;
           document.getElementById('modalPreviewMsg').textContent = '';
+          if (liveViewActive) setTimeout(refreshLiveView, 500);
+        };
+        img.onerror = () => {
+          img.onload = null;
+          img.onerror = null;
+          document.getElementById('modalPreviewMsg').textContent = 'Camera not available. Check that the camera is connected to the device.';
+          if (liveViewActive) setTimeout(refreshLiveView, 2000);
         };
         img.src = url;
       }
@@ -1236,15 +1248,13 @@ def create_provisioning_app(
             clearInterval(previewTimer);
             previewTimer = null;
           }
+          liveViewActive = true;
           refreshLiveView();
-          if (!liveViewTimer) {
-            liveViewTimer = setInterval(refreshLiveView, 2000);
-          }
         } else {
-          if (liveViewTimer) {
-            clearInterval(liveViewTimer);
-            liveViewTimer = null;
-          }
+          liveViewActive = false;
+          const img = document.getElementById('modalPreview');
+          img.onload = null;
+          img.onerror = null;
           // Resume main panel camera timer if camera verification is enabled.
           updateCameraPanel();
         }
