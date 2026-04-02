@@ -9,7 +9,7 @@ User=root
 Group=root
 WorkingDirectory=/opt/smartblaster/software
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/smartblaster/software/.venv/bin/smartblaster-device --mode auto --state-file /var/lib/smartblaster/device_setup.json --setup-host 0.0.0.0 --setup-port 8080 --enable-ap-mode --ap-use-sudo --ap-start-script /opt/smartblaster/software/deploy/ap/start_ap_mode.sh --ap-stop-script /opt/smartblaster/software/deploy/ap/stop_ap_mode.sh
+ExecStart=/home/pi/SmartBlaster/software/.venv/bin/smartblaster-device --mode auto --state-file /var/lib/smartblaster/device_setup.json --setup-host 0.0.0.0 --setup-port 8080 --enable-ap-mode --ap-use-sudo --ap-start-script /home/pi/SmartBlaster/software/deploy/ap/start_ap_mode.sh --ap-stop-script /home/pi/SmartBlaster/software/deploy/ap/stop_ap_mode.sh
 Restart=always
 RestartSec=3
 
