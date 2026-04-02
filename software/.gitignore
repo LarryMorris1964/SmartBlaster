@@ -1,2 +1,7 @@
 # Local evaluation artifacts
 data/vision_eval_report.json
+
+# Debug test images
+data/test_images/
+src/test_image*.jpg
+src/test.jpg
